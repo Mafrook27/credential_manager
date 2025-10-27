@@ -15,7 +15,7 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
-      - key: ENCRYPTION_KEY
+      - key: CRED_SECRET_KEY
         sync: false
       - key: AUTH_ID
         sync: false
