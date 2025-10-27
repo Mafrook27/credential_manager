@@ -23,11 +23,12 @@ app.use(cors({
     "http://localhost:5173",  
     "http://localhost:5000",  
     "https://amiee-cismontane-fredricka.ngrok-free.dev",
-    "https://credentialmanager-jjq62i0pj-mafrook27s-projects.vercel.app"
+    "https://credentialmanager-jjq62i0pj-mafrook27s-projects.vercel.app",
+    "https://credential-manager-api.onrender.com"
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type']
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 
