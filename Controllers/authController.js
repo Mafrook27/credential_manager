@@ -117,6 +117,7 @@ login: async (req, res, next) => {
           name: user.name,
           email: user.email,
           role: user.role,
+          isVerified: user.isVerified,
           lastLogin: user.lastLogin
         },
         // token  //  if you want to support old frontend

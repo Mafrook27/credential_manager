@@ -18,14 +18,21 @@ connectDB();
 
 const app = express();
 app.use(cookieParser()); 
+// CORS configuration - Allow frontend origins
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5000",
+  "https://amiee-cismontane-fredricka.ngrok-free.dev",
+  "https://credentialmanager-jjq62i0pj-mafrook27s-projects.vercel.app"
+];
+
+// Add production frontend URL from environment variable if exists
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 app.use(cors({
-  origin: [
-    "http://localhost:5173",  
-    "http://localhost:5000",  
-    "https://amiee-cismontane-fredricka.ngrok-free.dev",
-    "https://credentialmanager-jjq62i0pj-mafrook27s-projects.vercel.app",
-    "https://credential-manager-api.onrender.com"
-  ],
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
