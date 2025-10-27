@@ -1,0 +1,45 @@
+# Environment files
+.env
+.env.*
+*.env
+
+# Test and temporary files
+test-all-endpoints.js
+text.txt
+*.txt
+
+# GitHub and documentation
+.github/
+*.md
+
+# VSCode and config files
+.vscode/
+*.json
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs
+logs/
+*.log
+
+# Runtime data and builds
+dist/
+build/
+.out/
+
+# IDE files
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads
+uploads/
+storage/uploads/
