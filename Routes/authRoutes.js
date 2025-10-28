@@ -407,6 +407,4 @@ router.post('/reset-password',track('PASSWORD_RESET_REQUEST'),validate(resetPass
  */
 router.post('/reset-password/verify', track('PASSWORD_RESET_VERIFY') ,validate(resetPasswordVerifySchema), auth.resetPasswordverify);
 
-                                             
-
 module.exports = router;

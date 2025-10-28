@@ -8,7 +8,9 @@ const getActivityLogs = async (req, res, next) => {
       isslow,
       iserror,
       startdate,
-      enddate
+      enddate,
+      sortby,
+      sortorder
     } = req.query;
 
     const query = {};
@@ -36,9 +38,14 @@ const getActivityLogs = async (req, res, next) => {
     // Get total count
     const total = await ActivityLog.countDocuments(query);
     
-    // Get paginated logs (sorted newest first)
+    // Build sort object
+    const sortField = sortby || 'timestamp';
+    const sortDir = sortorder === 'asc' ? 1 : -1;
+    const sortObj = { [sortField]: sortDir };
+    
+    // Get paginated logs with dynamic sorting
     const logs = await ActivityLog.find(query)
-      .sort({ timestamp: -1 }) // -1 = descending (newest first), 1 = ascending (oldest first)
+      .sort(sortObj)
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit))
       .lean();

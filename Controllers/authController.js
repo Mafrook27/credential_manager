@@ -100,13 +100,15 @@ login: async (req, res, next) => {
     
     const token = generateToken({ id: user._id });
 
-   //ttpOnly cookie method 
+   // HttpOnly auth cookie; secure cross-site in production
+   const isProd = process.env.NODE_ENV === 'production';
    res.cookie('token', token, {
-  httpOnly: true,
-  secure: false,         
-  sameSite: 'lax',       
-  maxAge: 60 * 60 * 1000
-});
+     httpOnly: true,
+     secure: isProd, // HTTPS required for cross-site cookies
+     sameSite: isProd ? 'none' : 'lax', // 'none' allows cross-site in production
+     path: '/',
+     maxAge: 60 * 60 * 1000
+   });
 
  
     res.json({
@@ -135,11 +137,13 @@ login: async (req, res, next) => {
     try {
       logger.info(`User logout: ${req.user?.email}`); 
 
+       const isProd = process.env.NODE_ENV === 'production';
        res.clearCookie('token', {
-      httpOnly: true,
-      secure: false,     
-      sameSite: 'lax'       
-    });
+         httpOnly: true,
+         secure: isProd,
+         sameSite: isProd ? 'none' : 'lax',
+         path: '/'
+       });
 
       res.json({ 
         success: true,

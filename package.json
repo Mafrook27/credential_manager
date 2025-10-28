@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@vue/server-renderer": "^3.5.22",
     "axios": "^1.6.8",
     "bcryptjs": "^2.4.3",
     "connect-mongo": "^5.1.0",
