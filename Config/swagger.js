@@ -1,6 +1,5 @@
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
-const path = require('path'); // ✅ Add this
 
 const options = {
   definition: {
@@ -26,11 +25,11 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:5000', 
-        description: 'Development server'
+        url:'http://localhost:5000', 
+       description: 'Development server'
       },
-      {
-        url: 'https://credential-manager-gr15.onrender.com', // ✅ Use your actual Render URL
+       {
+        url: 'https://amiee-cismontane-fredricka.ngrok-free.dev',
         description: 'Production server'
       }
     ],
@@ -74,11 +73,7 @@ const options = {
       bearerAuth: []
     }]
   },
-  // ✅ FIX: Use absolute paths with path.join()
-  apis: [
-    path.join(__dirname, './routes/*.js'),
-    path.join(__dirname, './models/*.js')
-  ]
+  apis: ['./routes/*.js', './models/*.js'],
 };
 
 const specs = swaggerJsdoc(options);
