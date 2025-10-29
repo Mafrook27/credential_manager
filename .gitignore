@@ -14,7 +14,6 @@ text.txt
 
 # VSCode and config files
 .vscode/
-*.json
 
 # Dependencies
 node_modules/
