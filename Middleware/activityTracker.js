@@ -13,7 +13,7 @@ const config = {
   LOG_TO_CONSOLE: false,
   ENABLE_GEOLOCATION: true,
   EXCLUDE_PATHS: [
-    '/api/health',
+    '/api/h',
     '/api-docs',
     '/swagger.json',
     '/favicon.ico',
