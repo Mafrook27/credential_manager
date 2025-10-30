@@ -453,7 +453,19 @@ const adminCredentialController = {
           .sort({ timestamp: -1 })
           .skip(skip)
           .limit(parseInt(limit))
-          .populate('credential', 'serviceName type')
+          .populate({
+            path: 'credential',
+            populate: [
+              {
+                path: 'subInstance',
+                select: 'name _id'
+              },
+              {
+                path: 'rootInstance',
+                select: 'serviceName type _id'
+              }
+            ]
+          })
           .populate('user', 'name email')
           .populate('targetUser', 'name email')
           .lean(),
