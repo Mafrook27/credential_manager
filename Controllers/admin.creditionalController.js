@@ -290,7 +290,8 @@ const adminCredentialController = {
       const userId = req.payload.id;
 
       const credential = await Credential.findById(credentialId)
-        .populate('rootInstance', 'serviceName type');
+        .populate('rootInstance', 'serviceName type')
+        .populate('subInstance', 'name');
 
       if (!credential) {
         const error = new Error('Credential not found');
@@ -376,8 +377,8 @@ const adminCredentialController = {
         user: userId,
         credential: credentialId,
         credentialOwner: credential.createdBy,
-        serviceName: credential.rootInstance?.serviceName || 'Unknown',
-        subInstanceName: credential.subInstance?.name || 'N/A',
+        serviceName: populatedCredential.rootInstance?.serviceName || 'Unknown',
+        subInstanceName: populatedCredential.subInstance?.name || 'N/A',
         action: 'decrypt',
         ipAddress:getClientIP(req).address,
         userAgent: req.get('User-Agent')

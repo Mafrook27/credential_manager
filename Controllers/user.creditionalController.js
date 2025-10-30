@@ -258,7 +258,9 @@ const userCredentialController = {
       const credId = req.params.credId;
       const { username, password, url, notes } = req.body;  
 
-      const credential = await Credential.findById(credId).populate('rootInstance', 'serviceName type');
+      const credential = await Credential.findById(credId)
+        .populate('rootInstance', 'serviceName type')
+        .populate('subInstance', 'name');
 
       if (!credential) {
         const error = new Error('Credential not found');
@@ -336,7 +338,8 @@ const userCredentialController = {
       const userId = req.payload.id;
 
       const credential = await Credential.findById(credentialId)
-        .populate('rootInstance', 'serviceName type');
+        .populate('rootInstance', 'serviceName type')
+        .populate('subInstance', 'name');
 
       if (!credential) {
         const error = new Error('Credential not found');
@@ -406,7 +409,8 @@ shareCredential: async (req, res, next) => {
     const userRole = req.user?.role; // From authorize middleware
 
     const credential = await Credential.findById(credentialId)
-      .populate('rootInstance', 'serviceName type');
+      .populate('rootInstance', 'serviceName type')
+      .populate('subInstance', 'name');
 
     if (!credential) {
       const error = new Error('Credential not found');
@@ -484,7 +488,8 @@ revokeAccess: async (req, res, next) => {
     const userRole = req.user?.role; // From authorize middleware
 
     const credential = await Credential.findById(credentialId)
-      .populate('rootInstance', 'serviceName type');
+      .populate('rootInstance', 'serviceName type')
+      .populate('subInstance', 'name');
 
     if (!credential) {
       const error = new Error('Credential not found');
@@ -628,8 +633,8 @@ revokeAccess: async (req, res, next) => {
         user: userId,
         credential: credentialId,
         credentialOwner: credential.createdBy,
-        serviceName: credential.rootInstance?.serviceName || 'Unknown',
-        subInstanceName: credential.subInstance?.name || 'N/A',
+        serviceName: populatedCredential.rootInstance?.serviceName || 'Unknown',
+        subInstanceName: populatedCredential.subInstance?.name || 'N/A',
         action: 'decrypt',
         ipAddress:getClientIP(req).address,
         userAgent: req.get('User-Agent')
