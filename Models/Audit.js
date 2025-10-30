@@ -8,6 +8,7 @@ const auditSchema = new mongoose.Schema({
   credential: { type: mongoose.Schema.Types.ObjectId, ref: "Credential", required: true },
   credentialOwner: { type: mongoose.Schema.Types.ObjectId, ref: "C_User", required: true },
   serviceName: { type: String, required: true },
+  subInstanceName: { type: String }, // Store sub-instance name for historical tracking
   action: { type: String, enum: ["view", "update", "delete", "share", "revoke","decrypt","create"], required: true },
   targetUser: { type: mongoose.Schema.Types.ObjectId, ref: "C_User" },
   ipAddress: { type: String },

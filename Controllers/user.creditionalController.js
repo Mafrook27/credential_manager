@@ -142,7 +142,8 @@ const userCredentialController = {
           user: userId,
           credential: credentialId,
           credentialOwner: credential.createdBy._id,
-          serviceName: credential.rootInstance.serviceName, 
+          serviceName: credential.rootInstance.serviceName,
+          subInstanceName: credential.subInstance?.name || 'N/A',
           action: 'view',
           ipAddress: getClientIP(req).address,
           userAgent: req.get('User-Agent')
@@ -230,6 +231,7 @@ const userCredentialController = {
         credential: credential._id,
         credentialOwner: userId,
         serviceName: rootInstance.serviceName,
+        subInstanceName: subInstance?.name || 'N/A',
         action: 'create',
         ipAddress: getClientIP(req).address,
         userAgent: req.get('User-Agent')
@@ -285,6 +287,7 @@ const userCredentialController = {
         credential: credId,
         credentialOwner: credential.createdBy,
         serviceName: credential.rootInstance.serviceName,
+        subInstanceName: credential.subInstance?.name || 'N/A',
         action: 'update',
         ipAddress: getClientIP(req).address,
         userAgent: req.get('User-Agent')
@@ -376,7 +379,8 @@ const userCredentialController = {
         user: userId,
         credential: credentialId,
         credentialOwner: credential.createdBy,
-        serviceName: credential.rootInstance.serviceName, 
+        serviceName: credential.rootInstance.serviceName,
+        subInstanceName: credential.subInstance?.name || 'N/A',
         action: 'delete',
         ipAddress:getClientIP(req).address,
         userAgent: req.get('User-Agent')
@@ -447,7 +451,8 @@ shareCredential: async (req, res, next) => {
       user: userId,
       credential: credentialId,
       credentialOwner: credential.createdBy,
-      serviceName: credential.rootInstance.serviceName, 
+      serviceName: credential.rootInstance.serviceName,
+      subInstanceName: credential.subInstance?.name || 'N/A',
       action: 'share',
       targetUser: targetUserId,
       ipAddress: getClientIP(req).address,
@@ -513,6 +518,7 @@ revokeAccess: async (req, res, next) => {
       credential: credentialId,
       credentialOwner: credential.createdBy,
       serviceName: credential.rootInstance.serviceName,
+      subInstanceName: credential.subInstance?.name || 'N/A',
       action: 'revoke',
       targetUser: targetUserId,
       ipAddress: getClientIP(req).address,
@@ -623,6 +629,7 @@ revokeAccess: async (req, res, next) => {
         credential: credentialId,
         credentialOwner: credential.createdBy,
         serviceName: credential.rootInstance?.serviceName || 'Unknown',
+        subInstanceName: credential.subInstance?.name || 'N/A',
         action: 'decrypt',
         ipAddress:getClientIP(req).address,
         userAgent: req.get('User-Agent')

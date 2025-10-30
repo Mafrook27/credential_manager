@@ -212,6 +212,7 @@ const adminCredentialController = {
       credential: credential._id,
       credentialOwner: userId,
       serviceName: rootInstance.serviceName,
+      subInstanceName: subInstance?.name || 'N/A',
       action: 'create',
       ipAddress: getClientIP(req).address,
       userAgent: req.get('User-Agent')
@@ -255,6 +256,7 @@ const adminCredentialController = {
       credential: credId,
       credentialOwner: credential.createdBy,
       serviceName: credential.rootInstance.serviceName,
+      subInstanceName: credential.subInstance?.name || 'N/A',
       action: 'update',
       ipAddress: getClientIP(req).address,
       userAgent: req.get('User-Agent')
@@ -324,7 +326,8 @@ const adminCredentialController = {
         user: userId,
         credential: credentialId,
         credentialOwner: credential.createdBy,
-        serviceName: credential.rootInstance.serviceName, 
+        serviceName: credential.rootInstance.serviceName,
+        subInstanceName: credential.subInstance?.name || 'N/A', // Store sub-instance name
         action: 'delete',
         ipAddress:getClientIP(req).address,
         userAgent: req.get('User-Agent')
@@ -374,6 +377,7 @@ const adminCredentialController = {
         credential: credentialId,
         credentialOwner: credential.createdBy,
         serviceName: credential.rootInstance?.serviceName || 'Unknown',
+        subInstanceName: credential.subInstance?.name || 'N/A',
         action: 'decrypt',
         ipAddress:getClientIP(req).address,
         userAgent: req.get('User-Agent')
