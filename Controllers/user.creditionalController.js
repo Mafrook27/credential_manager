@@ -9,98 +9,107 @@ const { getClientIP } = require('../util/clientIp');
 
 
 const userCredentialController = {
-  // GET /api/users/credentials
-  // GET /api/users/credentials?search=<searchTerm>&type=<type>&page=<page>&limit=<limit>
-  getCredentials: async (req, res, next) => {
-    try {
-      const userId = req.payload.id;
-      const { search: rawSearch, type: rawType, page = 1, limit = 5 } = req.query;
+ // GET /api/users/credentials
+// GET /api/users/credentials?search=<searchTerm>&type=<type>&page=<page>&limit=<limit>
+getCredentials: async (req, res, next) => {
+  try {
+    const userId = req.payload.id;
+    const { search: rawSearch, type: rawType, page = 1, limit = 5 } = req.query;
 
-      const search = Array.isArray(rawSearch) ? rawSearch[0] : rawSearch?.trim();
-      const type = Array.isArray(rawType) ? rawType[0] : rawType?.trim();
+    const search = Array.isArray(rawSearch) ? rawSearch[0] : rawSearch?.trim();
+    const type = Array.isArray(rawType) ? rawType[0] : rawType?.trim();
 
-      const currentUser = await User.findById(userId).lean();
-      if (!currentUser) throw Object.assign(new Error('User not found'), { statusCode: 404 });
+    const currentUser = await User.findById(userId).lean();
+    if (!currentUser) throw Object.assign(new Error('User not found'), { statusCode: 404 });
 
-      const baseAccessFilter = {
-        $or: [
-          { createdBy: userId },
-          { sharedWith: userId }
-        ]
-      };
+    const baseAccessFilter = {
+      $or: [
+        { createdBy: userId },
+        { sharedWith: userId }
+      ]
+    };
 
-      // ----- Dynamic Search Filters -----
-      const orFilters = [];
-      let rootQuery = {}; 
+    const orFilters = [];
+    let rootQuery = {}; 
 
-      if (search && type) {
-        rootQuery.$and = [
-          { serviceName: { $regex: search, $options: 'i' } },
-          { type }
-        ];
-      } else if (search) {
-        rootQuery.serviceName = { $regex: search, $options: 'i' };
-      } else if (type) {
-        rootQuery.type = type;
-      }
-
-      const subQuery = search
-        ? { name: { $regex: search, $options: 'i' } }
-        : null;
-
-      const [rootInstances, subInstances] = await Promise.all([
-        RootInstance.find(rootQuery).select('_id'),
-        subQuery ? SubInstance.find(subQuery).select('_id') : []
-      ]);
-
-      const rootIds = rootInstances.map(r => r._id);
-      const subIds = subInstances.map(s => s._id);
-
-      if (rootIds.length > 0) orFilters.push({ rootInstance: { $in: rootIds } });
-      if (subIds.length > 0) orFilters.push({ subInstance: { $in: subIds } });
-
-      // ----- Final Filter -----
-      const finalFilter = orFilters.length > 0
-        ? { $and: [baseAccessFilter, { $or: orFilters }] }
-        : baseAccessFilter;
-
-      // ----- Pagination Setup -----
-      const parsedLimit = Math.max(parseInt(limit), 1);
-      const parsedPage = Math.max(parseInt(page), 1);
-      const skip = (parsedPage - 1) * parsedLimit;
-
-      // ----- Fetch Matching Credentials -----
-      const [credentials, total] = await Promise.all([
-        Credential.find(finalFilter)
-          .populate('rootInstance', 'serviceName type')
-          .populate('subInstance', 'name')
-          .populate('createdBy', 'name email')
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(parsedLimit)
-          .lean(),
-
-        Credential.countDocuments(finalFilter)
-      ]);
-
-      const displayCredentials = credentials.map(cred => getDisplayCredential(cred));
-
-      // ----- Response -----
-      res.json({
-        success: true,
-        count: credentials.length,
-        total,
-        page: parsedPage,
-        limit: parsedLimit,
-        totalPages: Math.ceil(total / parsedLimit),
-        data: { credentials: displayCredentials }
-      });
-
-    } catch (error) {
-      logger.error('getCredentials', { message: error.message, stack: error.stack });
-      next(error);
+    if (search && type) {
+      rootQuery.$and = [
+        { serviceName: { $regex: search, $options: 'i' } },
+        { type }
+      ];
+    } else if (search) {
+      rootQuery.serviceName = { $regex: search, $options: 'i' };
+    } else if (type) {
+      rootQuery.type = type;
     }
-  },
+
+    const subQuery = search
+      ? { name: { $regex: search, $options: 'i' } }
+      : null;
+
+    const [rootInstances, subInstances] = await Promise.all([
+      RootInstance.find(rootQuery).select('_id'),
+      subQuery ? SubInstance.find(subQuery).select('_id') : []
+    ]);
+
+    const rootIds = rootInstances.map(r => r._id);
+    const subIds = subInstances.map(s => s._id);
+
+    if (rootIds.length > 0) orFilters.push({ rootInstance: { $in: rootIds } });
+    if (subIds.length > 0) orFilters.push({ subInstance: { $in: subIds } });
+
+    // ===== FINAL FILTER [FIXED] =====
+    // 🔧 CRITICAL FIX: Check if search is active
+    const isSearchActive = search || type;
+
+    let finalFilter;
+    if (isSearchActive && orFilters.length === 0) {
+      // 🐛 BUG FIX: User searched but found NO matches
+      // Return { _id: null } to get empty array
+      finalFilter = { _id: null };
+    } else if (orFilters.length > 0) {
+      // ✅ Search matched instances - combine filters
+      finalFilter = { $and: [baseAccessFilter, { $or: orFilters }] };
+    } else {
+      // ✅ No search active - show all user credentials
+      finalFilter = baseAccessFilter;
+    }
+
+    const parsedLimit = Math.max(parseInt(limit), 1);
+    const parsedPage = Math.max(parseInt(page), 1);
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const [credentials, total] = await Promise.all([
+      Credential.find(finalFilter)
+        .populate('rootInstance', 'serviceName type')
+        .populate('subInstance', 'name')
+        .populate('createdBy', 'name email')
+        .populate('sharedWith', 'name email')    
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parsedLimit)
+        .lean(),
+
+      Credential.countDocuments(finalFilter)
+    ]);
+
+    const displayCredentials = credentials.map(cred => getDisplayCredential(cred));
+
+    res.json({
+      success: true,
+      count: credentials.length,
+      total,
+      page: parsedPage,
+      limit: parsedLimit,
+      totalPages: Math.ceil(total / parsedLimit),
+      data: { credentials: displayCredentials }
+    });
+
+  } catch (error) {
+    logger.error('getCredentials', { message: error.message, stack: error.stack });
+    next(error);
+  }
+},
 
   // GET /api/users/credentials/:id
   getCredential: async (req, res, next) => {
