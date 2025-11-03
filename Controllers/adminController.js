@@ -429,7 +429,7 @@ getStats :async (req, res, next) => {
       const isAccessGivenToMe = accessGivenToMe === 'true';
       const isAccessGivenByMe = accessGivenByMe === 'true';
 
-      // User filter
+      // User filter (only for userName, not search)
       const userMatch = {};
       if (userName) {
         userMatch.name = { 
@@ -448,11 +448,6 @@ getStats :async (req, res, next) => {
       if (type) {
         rootMatchConditions.push({ type: type.trim() });
       }
-      if (search) {
-        rootMatchConditions.push({ 
-          serviceName: { $regex: escapeRegex(search.trim()), $options: 'i' } 
-        });
-      }
 
       // Build sub instance match conditions
       const subMatchConditions = [];
@@ -461,15 +456,10 @@ getStats :async (req, res, next) => {
           name: { $regex: escapeRegex(subName.trim()), $options: 'i' } 
         });
       }
-      if (search) {
-        subMatchConditions.push({ 
-          name: { $regex: escapeRegex(search.trim()), $options: 'i' } 
-        });
-      }
 
       // Build aggregation pipeline
       const pipeline = [
-        // Filter users by name if provided
+        // Filter users by name if provided (not search)
         ...(Object.keys(userMatch).length > 0 ? [{ $match: userMatch }] : []),
         
         // Lookup MY INSTANCES (roots, subs, credentials I own)
@@ -717,6 +707,19 @@ getStats :async (req, res, next) => {
             sharedAccess: { $ifNull: ['$sharedAccess', []] }
           }
         },
+        // Apply search filter after all lookups (search across user name, email, and instances)
+        ...(search ? [{
+          $match: {
+            $or: [
+              { name: { $regex: escapeRegex(search.trim()), $options: 'i' } },
+              { email: { $regex: escapeRegex(search.trim()), $options: 'i' } },
+              { 'myInstances.rootName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
+              { 'myInstances.subInstances.subName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
+              { 'sharedAccess.rootInstance.rootName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
+              { 'sharedAccess.subInstance.subName': { $regex: escapeRegex(search.trim()), $options: 'i' } }
+            ]
+          }
+        }] : []),
         { $sort: { name: 1 } },
         {
           $facet: {
