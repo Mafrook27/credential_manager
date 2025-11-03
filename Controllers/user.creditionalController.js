@@ -11,6 +11,8 @@ const { getClientIP } = require('../util/clientIp');
 const userCredentialController = {
  // GET /api/users/credentials
 // GET /api/users/credentials?search=<searchTerm>&type=<type>&page=<page>&limit=<limit>
+// user.credentialController.js
+
 getCredentials: async (req, res, next) => {
   try {
     const userId = req.payload.id;
@@ -58,20 +60,15 @@ getCredentials: async (req, res, next) => {
     if (rootIds.length > 0) orFilters.push({ rootInstance: { $in: rootIds } });
     if (subIds.length > 0) orFilters.push({ subInstance: { $in: subIds } });
 
-    // ===== FINAL FILTER [FIXED] =====
-    // 🔧 CRITICAL FIX: Check if search is active
+    // ===== FINAL FILTER =====
     const isSearchActive = search || type;
 
     let finalFilter;
     if (isSearchActive && orFilters.length === 0) {
-      // 🐛 BUG FIX: User searched but found NO matches
-      // Return { _id: null } to get empty array
       finalFilter = { _id: null };
     } else if (orFilters.length > 0) {
-      // ✅ Search matched instances - combine filters
       finalFilter = { $and: [baseAccessFilter, { $or: orFilters }] };
     } else {
-      // ✅ No search active - show all user credentials
       finalFilter = baseAccessFilter;
     }
 
@@ -93,7 +90,15 @@ getCredentials: async (req, res, next) => {
       Credential.countDocuments(finalFilter)
     ]);
 
-    const displayCredentials = credentials.map(cred => getDisplayCredential(cred));
+    // ========== ✅ ADD isOwner FLAG ==========
+    const displayCredentials = credentials.map(cred => {
+      const isOwner = cred.createdBy._id.toString() === userId;
+      
+      return {
+        ...getDisplayCredential(cred),
+        isOwner // ✅ ADD THIS FIELD
+      };
+    });
 
     res.json({
       success: true,
