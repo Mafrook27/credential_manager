@@ -401,6 +401,32 @@ getStats :async (req, res, next) => {
   }
 },
 
+blockUser: async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findById(id);
+    if (!user) {
+      const error = new Error("User not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    user.isVerified = false;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: `User ${user.email} blocked successfully.`,
+    });
+
+    logger.info('blockUser', { userId: id, performedBy: req.user._id });
+  } catch (error) {
+    logger.error('blockUser', { message: error.message, stack: error.stack });
+    next(error);
+  }
+},
+
   // GET /api/admin/access
   // GET /api/admin/access?userName=<name>&rootName=<root>&subName=<sub>&type=<type>&search=<term>&accessGivenToMe=<true/false>&accessGivenByMe=<true/false>&page=<page>&limit=<limit>
   getUserAccess: async (req, res, next) => {

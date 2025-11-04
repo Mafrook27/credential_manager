@@ -18,6 +18,7 @@ router.use(authenticateToken, requireAdmin);
 router.get('/users', track('ADMIN_READ_ALL_USERS'), adminUserController.getAllUsers);
 router.post('/users', track('ADMIN_CREATE_USER'), adminUserController.createUser); 
 router.get('/users/permission/:id', track('ADMIN_APPROVE_USER'), adminUserController.approveUser);
+router.get('/users/block/:id', track('ADMIN_BLOCK_USER'), adminUserController.blockUser);
 router.get('/users/:id', track('ADMIN_READ_USER_PROFILE'), adminUserController.getUserProfile);
 router.put('/users/:id', track('ADMIN_UPDATE_USER'), adminUserController.updateUser);
 router.delete('/users/:id', track('ADMIN_DELETE_USER'), adminUserController.deleteUser);
