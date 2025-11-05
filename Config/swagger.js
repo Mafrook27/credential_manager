@@ -29,7 +29,7 @@ const options = {
        description: 'Development server'
       },
        {
-        url: 'https://amiee-cismontane-fredricka.ngrok-free.dev',
+        url: process.env.BACKEND_URL || 'https://your-render-app.onrender.com',
         description: 'Production server'
       }
     ],
@@ -73,7 +73,7 @@ const options = {
       bearerAuth: []
     }]
   },
-  apis: ['./routes/*.js', './models/*.js'],
+  apis: ['./Routes/*.js', './Models/*.js'],
 };
 
 const specs = swaggerJsdoc(options);
