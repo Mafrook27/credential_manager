@@ -138,7 +138,7 @@ const auth = {
         ipAddress
       );
 
-      logger.info(`✅ New session created for user ${user.email}. Old sessions deleted.`);
+      logger.info(`✅ New session created for user ${user.email}. Old sessions marked inactive.`);
 
       // Get token expiry times from env
       const getAccessMaxAge = () => {
@@ -219,19 +219,19 @@ const auth = {
       const { verifyRefreshToken } = require('../util/jwtUtil');
       const { generateAccessToken } = require('../util/jwtUtil');
 
-      // Find session
+      // Find session and check if it's ACTIVE
       logger.info('🔍 Looking for session in database...');
-      const session = await Session.findOne({ refreshToken });
+      const session = await Session.findOne({ refreshToken, active: true });
 
       if (!session) {
-        logger.warn('❌ Session not found in database (may have been deleted by new login)');
+        logger.warn('❌ Session not found or inactive (logged in from another device)');
         const error = new Error('Session invalid or logged in from another device. Please login again.');
         error.statusCode = 401;
         error.code = 'SESSION_EXPIRED';
         throw error;
       }
 
-      logger.info(`✅ Session found - User: ${session.userId}, Current refresh count: ${session.refreshCount}`);
+      logger.info(`✅ Active session found - User: ${session.userId}, Current refresh count: ${session.refreshCount}`);
 
       // Verify refresh token
       try {
@@ -306,10 +306,17 @@ const auth = {
     try {
       const refreshToken = req.cookies?.refreshToken;
 
-      // Delete session from database
+      // Mark session as inactive (keep for audit trail)
       if (refreshToken) {
         const Session = require('../models/Session');
-        await Session.deleteOne({ refreshToken });
+        const result = await Session.updateOne(
+          { refreshToken },
+          { active: false }
+        );
+
+        if (result.modifiedCount > 0) {
+          logger.info(`✅ Session marked inactive for logout`);
+        }
       }
 
       const isProd = process.env.NODE_ENV === 'production';
@@ -563,7 +570,19 @@ const auth = {
         }
       );
 
-      res.json({ message: "Password reset successful" });
+      // ✅ CRITICAL: Invalidate all sessions when password is reset
+      const Session = require('../models/Session');
+      await Session.updateMany(
+        { userId: user._id },
+        { active: false }
+      );
+
+      logger.info(`🔒 Password reset successful for ${email}. All sessions invalidated.`);
+
+      res.json({
+        success: true,
+        message: "Password reset successful. Please login with your new password."
+      });
     } catch (error) {
       logger.error("Reset verify error", { message: error.message, stack: error.stack });
       next(error);

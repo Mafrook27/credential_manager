@@ -18,12 +18,12 @@ const getRefreshMaxTime = () => {
 
 const createSession = async (payload, userAgent = null, ipAddress = null) => {
   // ✅ Mark old sessions as inactive instead of deleting
-  await Session.updateMany(
-    { userId: payload.id },
-    { active: false }
+  const updateResult = await Session.updateMany(
+    { userId: payload.id, active: true },
+    { $set: { active: false } }
   );
 
-  logger.info(`Marked previous sessions as inactive for user ${payload.id}`);
+  logger.info(`🔄 Marked ${updateResult.modifiedCount} previous session(s) as inactive for user ${payload.id}`);
 
   const refreshToken = generateRefreshToken(payload);
   const expiresAt = new Date(Date.now() + getRefreshMaxTime());
@@ -38,7 +38,7 @@ const createSession = async (payload, userAgent = null, ipAddress = null) => {
     active: true  // ✅ New session is active
   });
 
-  logger.info(`Created new active session for user ${payload.id}`);
+  logger.info(`✅ Created new active session for user ${payload.id} (Session ID: ${session._id})`);
 
   const accessToken = generateAccessToken(payload);
   return { accessToken, refreshToken, session };

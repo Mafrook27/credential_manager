@@ -33,22 +33,32 @@ function authenticateToken(req, res, next) {
     const decoded = verifyAccessToken(token);
     req.payload = decoded.payload;
 
-    // ✅ Validate session is ACTIVE in database
+    // ✅ Validate THIS SPECIFIC session is ACTIVE in database
     const validateActiveSession = async () => {
+      const refreshToken = req.cookies?.refreshToken; // ✅ Get THIS browser's refresh token
+
+      // Count all sessions for this user
+      const allSessions = await Session.countDocuments({ userId: decoded.payload.id });
+      const activeSessions = await Session.countDocuments({ userId: decoded.payload.id, active: true });
+
+      logger.info(`📊 User ${decoded.payload.id} has ${activeSessions} active / ${allSessions} total sessions`);
+
+      // ✅ CRITICAL FIX: Check THIS specific session using refreshToken from cookie
       const session = await Session.findOne({
         userId: decoded.payload.id,
-        active: true  // ✅ Check if active
+        refreshToken: refreshToken, // ✅ Must match THIS browser's refresh token
+        active: true  // ✅ Must be active
       });
 
       if (!session) {
-        logger.warn(`❌ No active session found for user ${decoded.payload.id}`);
+        logger.warn(`❌ No active session found for user ${decoded.payload.id} with this refresh token`);
         const error = new Error("Session ended. You logged in from another device.");
         error.statusCode = 401;
         error.code = 'SESSION_INACTIVE';
         throw error;
       }
 
-      logger.info(`✅ Active session validated for user ${decoded.payload.id}`);
+      logger.info(`✅ Active session validated for user ${decoded.payload.id} (Session ID: ${session._id})`);
     };
 
     // Execute async validation and then call next()
