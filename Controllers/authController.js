@@ -1,31 +1,9 @@
 const bcrypt = require("bcryptjs");
 const User = require('../models/CRED_User');
-// const { generateToken } = require('../util/generateToken');
 const logger = require('../util/Logger');
-const nodemailer = require("nodemailer");
 const { Resend } = require('resend');
 const dotenv = require("dotenv");
 dotenv.config();
-
-
-
-
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // Use STARTTLS
-  auth: {
-    user: process.env.AUTH_ID,
-    pass: process.env.MAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false // Allow self-signed certificates
-  },
-  connectionTimeout: 10000, // 10 seconds timeout
-  greetingTimeout: 10000,
-  socketTimeout: 10000
-});
-
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -380,37 +358,38 @@ const auth = {
 
       // Resend sandbox mode: only works for verified email
       try {
-        logger.info(`📧 Sending reset email to ${email} via Resend...`);
+        logger.info(`📧 Sending reset email to ${email}...`);
 
         const { data, error } = await resend.emails.send({
-          from: "onboarding@resend.dev", // Sandbox sender
-          to: email,
+          from: "onboarding@resend.dev",
+          to: [email], // Must be array
           subject: "Password Reset Code - SparkLMS",
           html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
               <h2 style="color: #2962FF;">Password Reset Request</h2>
               <p>Your password reset code is:</p>
-              <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
+              <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; margin: 20px 0; border-radius: 8px;">
                 ${token}
               </div>
               <p>This code will expire in <strong>10 minutes</strong>.</p>
-              <p style="color: #666; font-size: 14px;">If you didn't request this, please ignore this email.</p>
+              <p style="color: #666; font-size: 14px; margin-top: 30px;">If you didn't request this, please ignore this email.</p>
             </div>
           `,
         });
 
         if (error) {
           logger.error(`❌ Resend error:`, error);
-          throw error;
+          // Provide helpful error message
+          if (error.message.includes('not verified') || error.message.includes('domain')) {
+            throw new Error('Email service configuration error. Please add your email to Resend audience at https://resend.com/audiences');
+          }
+          throw new Error(error.message);
         }
 
-        logger.info(`✅ Reset email sent via Resend`);
-      } catch (resendErr) {
-        logger.error(`❌ Email sending failed:`, {
-          error: resendErr.message,
-          note: 'Resend sandbox mode only sends to verified email. SMTP is blocked by Render.'
-        });
-        throw new Error('Email service unavailable. Please contact support.');
+        logger.info(`✅ Reset email sent successfully`);
+      } catch (emailErr) {
+        logger.error(`❌ Email failed:`, emailErr.message);
+        throw new Error(emailErr.message || 'Failed to send email. Please try again later.');
       }
 
       // In development, also return token for testing
