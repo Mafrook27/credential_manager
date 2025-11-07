@@ -3,13 +3,13 @@ const dotenv = require("dotenv");
 const connectDB = require("./Config/Db");
 const logger = require("./util/Logger");
 const requestLogger = require("./util/reqLogger");
-const { swaggerUi, specs } = require('./Config/swagger'); 
+const { swaggerUi, specs } = require('./Config/swagger');
 const apiroutes = require("./Routes/Index");
 const cookieParser = require('cookie-parser');
 
-const { 
-  activityTrackerMiddleware, 
-  attachRequestId 
+const {
+  activityTrackerMiddleware,
+  attachRequestId
 } = require("./Middleware/activityTracker");
 const helmet = require("helmet");
 const cors = require("cors");
@@ -17,7 +17,7 @@ dotenv.config();
 connectDB();
 
 const app = express();
-app.use(cookieParser()); 
+app.use(cookieParser());
 // CORS configuration - Allow frontend origins (configurable via env)
 // Defaults for local dev
 const defaultAllowedOrigins = [
@@ -48,14 +48,19 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow non-browser requests with no Origin (e.g., curl, server-to-server, Postman, Hoppscotch)
     if (!origin) return callback(null, true);
-    
+
     // In development, allow all origins for testing tools
     if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
       return callback(null, true);
     }
-    
+
     // In production, check allowed origins
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      logger.info(`✅ CORS allowed for origin: ${origin}`);
+      return callback(null, true);
+    }
+
+    logger.warn(`🚫 CORS blocked origin: ${origin}. Allowed origins: ${allowedOrigins.join(', ')}`);
     return callback(new Error("Not allowed by CORS"));
   },
   credentials: true,

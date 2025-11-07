@@ -373,6 +373,7 @@ const auth = {
 
       // Try Resend first, fallback to Gmail if fails
       try {
+        logger.info(`📧 Attempting to send reset email to ${email} via Resend...`);
         const { data, error } = await resend.emails.send({
           from: "onboarding@resend.dev",
           to: email,
@@ -384,14 +385,19 @@ const auth = {
         });
 
         if (error) {
+          logger.error(`❌ Resend error details:`, error);
           throw error;
         }
 
-        logger.info(`✅ Reset email sent to ${email} via Resend`);
+        logger.info(`✅ Reset email sent to ${email} via Resend`, { data });
       } catch (resendErr) {
-        logger.warn(`⚠️ Resend failed: ${resendErr.message}. Falling back to Gmail.`);
+        logger.warn(`⚠️ Resend failed: ${resendErr.message}. Falling back to Gmail.`, {
+          error: resendErr,
+          resendApiKey: process.env.RESEND_API_KEY ? 'SET' : 'NOT SET'
+        });
 
         try {
+          logger.info(`📧 Attempting Gmail fallback for ${email}...`);
           await transporter.sendMail({
             from: process.env.AUTH_ID,
             to: email,
@@ -401,12 +407,24 @@ const auth = {
 
           logger.info(`📩 Reset email sent to ${email} via Gmail fallback`);
         } catch (gmailErr) {
-          logger.error(`❌ Gmail fallback also failed: ${gmailErr.message}`);
+          logger.error(`❌ Gmail fallback also failed:`, {
+            message: gmailErr.message,
+            code: gmailErr.code,
+            authId: process.env.AUTH_ID ? 'SET' : 'NOT SET',
+            mailPass: process.env.MAIL_PASS ? 'SET' : 'NOT SET'
+          });
           throw new Error('Failed to send email. Please try again later.');
         }
       }
 
-      res.json({ message: "Password reset code sent to email" });
+      // In development, also return token for testing
+      const response = { message: "Password reset code sent to email" };
+      if (process.env.NODE_ENV === 'development') {
+        response.token = token; // Only for testing
+        logger.warn(`⚠️ DEV MODE: Reset token exposed in response: ${token}`);
+      }
+
+      res.json(response);
     } catch (error) {
       logger.error("Reset request error", { message: error.message, stack: error.stack });
       next(error);
