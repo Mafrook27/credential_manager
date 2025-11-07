@@ -1,11 +1,35 @@
 const bcrypt = require("bcryptjs");
 const User = require('../models/CRED_User');
+// const { generateToken } = require('../util/generateToken');
 const logger = require('../util/Logger');
-const { Resend } = require('resend');
+// const nodemailer = require("nodemailer");
+// const { Resend } = require('resend');
 const dotenv = require("dotenv");
+const emailjs = require("@emailjs/nodejs");
 dotenv.config();
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+emailjs.init({
+  publicKey: process.env.EMAILJS_PUBLIC_KEY,
+  privateKey: process.env.EMAILJS_PRIVATE_KEY,
+});
+
+// Add this logging right after init:
+console.log("✅ SERVICE_ID:", process.env.EMAILJS_SERVICE_ID);
+console.log("✅ TEMPLATE_ID:", process.env.EMAILJS_TEMPLATE_ID);
+console.log("✅ PUBLIC_KEY:", process.env.EMAILJS_PUBLIC_KEY?.substring(0, 10) + "...");
+console.log("✅ PRIVATE_KEY:", process.env.EMAILJS_PRIVATE_KEY ? "SET" : "NOT SET");
+
+// const transporter = nodemailer.createTransport({
+//   service: "gmail",
+//   auth: {
+//     user: process.env.AUTH_ID,
+
+//     pass: process.env.MAIL_PASS,
+//   }
+// });
+
+
+// const resend = new Resend(process.env.RESEND_API_KEY);
 
 const auth = {
   // Register user
@@ -310,20 +334,141 @@ const auth = {
       next(error);
     }
   },
+
+
+
+
+  // resetPasswordReq: async (req, res, next) => {
+  //   try {
+  //     const { email } = req.body;
+  //     const user = await User.findOne({ email }).lean();
+
+  //     if (!user) {
+  //       const error = new Error('User not found or email not in our records');
+  //       error.statusCode = 400;
+  //       throw error;
+  //     }
+
+  //     const token = Math.floor(100000 + Math.random() * 900000).toString();
+  //     const expiry = Date.now() + 10 * 60 * 1000;
+
+  //     await User.updateOne(
+  //       { email },
+  //       {
+  //         $set: {
+  //           resetToken: token,
+  //           resetTokenExpiry: expiry
+  //         }
+  //       }
+  //     );
+
+
+
+  //     //   await transporter.sendMail({
+  //     //     from: process.env.AUTH_ID,
+  //     //     to: email,
+  //     //     subject: "Password Reset Code",
+  //     //     text: `Your password reset code is: ${token}. It will expire in 10 minutes.`
+  //     //   });
+
+  //     //   res.json({ message: "Password reset code sent to email" });
+
+
+  //     // } catch (error) {
+  //     //   logger.error("Reset request error", { message: error.message, stack: error.stack });
+  //     //   next(error);
+  //     // }
+
+
+
+
+
+
+  //     // Try Resend first, fallback to Gmail if fails
+  //     try {
+  //       logger.info(`📧 Attempting to send reset email to ${email} via Resend...`);
+  //       const { data, error } = await resend.emails.send({
+  //         from: "onboarding@resend.dev",
+  //         to: email,
+  //         subject: "Password Reset Code",
+  //         html: `
+  //           <p>Your password reset code is <strong>${token}</strong>.</p>
+  //           <p>This code will expire in <b>10 minutes</b>.</p>
+  //         `,
+  //       });
+
+  //       if (error) {
+  //         logger.error(`❌ Resend error details:`, error);
+  //         throw error;
+  //       }
+
+  //       logger.info(`✅ Reset email sent to ${email} via Resend`, { data });
+  //     } catch (resendErr) {
+  //       logger.warn(`⚠️ Resend failed: ${resendErr.message}. Falling back to Gmail.`, {
+  //         error: resendErr,
+  //         resendApiKey: process.env.RESEND_API_KEY ? 'SET' : 'NOT SET'
+  //       });
+
+  //       try {
+  //         logger.info(`📧 Attempting Gmail fallback for ${email}...`);
+  //         await transporter.sendMail({
+  //           from: process.env.AUTH_ID,
+  //           to: email,
+  //           subject: "Password Reset Code",
+  //           text: `Your password reset code is: ${token}. It will expire in 10 minutes.`,
+  //         });
+
+  //         logger.info(`📩 Reset email sent to ${email} via Gmail fallback`);
+  //       } catch (gmailErr) {
+  //         logger.error(`❌ Gmail fallback also failed:`, {
+  //           message: gmailErr.message,
+  //           code: gmailErr.code,
+  //           authId: process.env.AUTH_ID ? 'SET' : 'NOT SET',
+  //           mailPass: process.env.MAIL_PASS ? 'SET' : 'NOT SET'
+  //         });
+  //         throw new Error('Failed to send email. Please try again later.');
+  //       }
+  //     }
+
+  //     // In development, also return token for testing
+  //     const response = { message: "Password reset code sent to email" };
+  //     if (process.env.NODE_ENV === 'development') {
+  //       response.token = token; // Only for testing
+  //       logger.warn(`⚠️ DEV MODE: Reset token exposed in response: ${token}`);
+  //     }
+
+  //     res.json(response);
+  //   } catch (error) {
+  //     logger.error("Reset request error", { message: error.message, stack: error.stack });
+  //     next(error);
+  //   }
+  // },
+
+
+
   resetPasswordReq: async (req, res, next) => {
     try {
       const { email } = req.body;
-      const user = await User.findOne({ email }).lean();
 
+      if (!email) {
+        const error = new Error('Email is required');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Check if user exists
+      const user = await User.findOne({ email }).lean();
       if (!user) {
         const error = new Error('User not found or email not in our records');
         error.statusCode = 400;
         throw error;
       }
 
+      // Generate 6-digit reset token
       const token = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiry = Date.now() + 10 * 60 * 1000;
+      const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes
 
+      // Save token to database
       await User.updateOne(
         { email },
         {
@@ -334,78 +479,46 @@ const auth = {
         }
       );
 
+      logger.info(`🔑 Reset token generated for ${email}`);
 
 
-      //   await transporter.sendMail({
-      //     from: process.env.AUTH_ID,
-      //     to: email,
-      //     subject: "Password Reset Code",
-      //     text: `Your password reset code is: ${token}. It will expire in 10 minutes.`
-      //   });
-
-      //   res.json({ message: "Password reset code sent to email" });
-
-
-      // } catch (error) {
-      //   logger.error("Reset request error", { message: error.message, stack: error.stack });
-      //   next(error);
-      // }
-
-
-
-
-
-
-      // Resend sandbox mode: only works for verified email
       try {
         logger.info(`📧 Sending reset email to ${email}...`);
 
-        const { data, error } = await resend.emails.send({
-          from: "onboarding@resend.dev",
-          to: [email], // Must be array
-          subject: "Password Reset Code - SparkLMS",
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              <h2 style="color: #2962FF;">Password Reset Request</h2>
-              <p>Your password reset code is:</p>
-              <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; margin: 20px 0; border-radius: 8px;">
-                ${token}
-              </div>
-              <p>This code will expire in <strong>10 minutes</strong>.</p>
-              <p style="color: #666; font-size: 14px; margin-top: 30px;">If you didn't request this, please ignore this email.</p>
-            </div>
-          `,
+        const response = await emailjs.send(
+          process.env.EMAILJS_SERVICE_ID,      // service_back_17
+          process.env.EMAILJS_TEMPLATE_ID,     // template_z65i5joo
+          {
+            email: email,                       // Goes to {{email}} in template
+            reset_token: token                  // Goes to {{reset_token}} in template
+          }
+        );
+
+        logger.info(`✅ Reset email sent successfully to ${email}`, {
+          messageId: response.text
         });
 
-        if (error) {
-          logger.error(`❌ Resend error:`, error);
-          // Provide helpful error message
-          if (error.message.includes('not verified') || error.message.includes('domain')) {
-            throw new Error('Email service configuration error. Please add your email to Resend audience at https://resend.com/audiences');
-          }
-          throw new Error(error.message);
-        }
+        res.json({
+          success: true,
+          message: "Password reset code has been sent to your email"
+        });
 
-        logger.info(`✅ Reset email sent successfully`);
-      } catch (emailErr) {
-        logger.error(`❌ Email failed:`, emailErr.message);
-        throw new Error(emailErr.message || 'Failed to send email. Please try again later.');
+      } catch (emailError) {
+        logger.error("❌ EmailJS error:", {
+          message: emailError.message,
+          status: emailError.status,
+          text: emailError.text
+        });
+
+        const error = new Error('Failed to send reset email. Please try again.');
+        error.statusCode = 500;
+        throw error;
       }
 
-      // In development, also return token for testing
-      const response = { message: "Password reset code sent to email" };
-      if (process.env.NODE_ENV === 'development') {
-        response.token = token; // Only for testing
-        logger.warn(`⚠️ DEV MODE: Reset token exposed in response: ${token}`);
-      }
-
-      res.json(response);
     } catch (error) {
-      logger.error("Reset request error", { message: error.message, stack: error.stack });
       next(error);
     }
   },
-
 
 
 
