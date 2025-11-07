@@ -1,10 +1,10 @@
-const Credential = require('../Models/Credential');
-const RootInstance = require('../Models/Root_Ins');
-const SubInstance = require('../Models/Sub_ins');
-const Audit = require('../Models/Audit');
-const User = require('../Models/CRED_User');
+const Credential = require('../models/Credential');
+const RootInstance = require('../models/Root_Ins');
+const SubInstance = require('../models/Sub_ins');
+const Audit = require('../models/Audit');
+const User = require('../models/CRED_User');
 const logger = require('../util/Logger');
-const { encrypt,decrypt,getDisplayCredential,getDecryptedCredential } = require('../util/cryptography');
+const { encrypt, decrypt, getDisplayCredential, getDecryptedCredential } = require('../util/cryptography');
 const { getClientIP } = require('../util/clientIp');
 const adminCredentialController = {
   // GET /api/admin/credentials
@@ -56,7 +56,7 @@ const adminCredentialController = {
       const parsedLimit = Math.max(parseInt(limit) || 5, 1);
       const parsedPage = Math.max(parseInt(page) || 1, 1);
       const skip = (parsedPage - 1) * parsedLimit;
-  
+
       // ----- Fetch Matching Credentials -----
       const [credentials, total] = await Promise.all([
         Credential.find(finalFilter)
@@ -75,7 +75,7 @@ const adminCredentialController = {
 
         Credential.countDocuments(finalFilter)
       ]);
-  
+
       const activeCredentials = credentials.filter(cred => cred.subInstance !== null);  // ADDED: Filter soft-deleted
 
       const displayCredentials = activeCredentials.map(cred => getDisplayCredential(cred));
@@ -89,16 +89,16 @@ const adminCredentialController = {
         totalPages: Math.ceil(total / parsedLimit),
         data: { credentials: displayCredentials }
       });
-  
+
     } catch (error) {
-      logger.error('adminGetAllCredentials', { 
-        message: error.message, 
-        stack: error.stack 
+      logger.error('adminGetAllCredentials', {
+        message: error.message,
+        stack: error.stack
       });
       next(error);
     }
   },
-  
+
 
   // GET /api/admin/credentials/:id
   getCredential: async (req, res, next) => {
@@ -145,10 +145,10 @@ const adminCredentialController = {
 
   // POST /api/admin/credentials?rootId=<rootId>&subId=<subId>
   createCredential: async (req, res, next) => {
-  try {
-    const userId = req.payload.id;
-    const { rootId, subId } = req.query
-    const { username, password, url, notes } = req.body; 
+    try {
+      const userId = req.payload.id;
+      const { rootId, subId } = req.query
+      const { username, password, url, notes } = req.body;
 
       // ADDED: Validation
       if (!rootId || !subId) {
@@ -194,15 +194,15 @@ const adminCredentialController = {
         isDeleted: false  // ADDED: Filter active credentials only
       });
 
-    if (existingCredential) {
-      const error = new Error(
-        `You already have a credential in "${rootInstance.serviceName} → ${subInstance.name}". ` +
-        `Only one credential per subinstance is allowed. Please update your existing credential instead.`
-      );
-      error.statusCode = 409;
-      error.existingCredentialId = existingCredential._id;
-      throw error;
-    }
+      if (existingCredential) {
+        const error = new Error(
+          `You already have a credential in "${rootInstance.serviceName} → ${subInstance.name}". ` +
+          `Only one credential per subinstance is allowed. Please update your existing credential instead.`
+        );
+        error.statusCode = 409;
+        error.existingCredentialId = existingCredential._id;
+        throw error;
+      }
 
       const credential = await Credential.create({
         rootInstance: rootId,
@@ -357,7 +357,7 @@ const adminCredentialController = {
         action: 'delete',
         ipAddress: getClientIP(req).address,
         userAgent: req.get('User-Agent'),
-        timestamp: now  
+        timestamp: now
       });
 
       res.json({

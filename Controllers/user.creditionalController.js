@@ -1,17 +1,17 @@
-const Credential = require('../Models/Credential');
-const RootInstance = require('../Models/Root_Ins');
-const SubInstance = require('../Models/Sub_ins');
-const Audit = require('../Models/Audit');
-const User = require('../Models/CRED_User');
+const Credential = require('../models/Credential');
+const RootInstance = require('../models/Root_Ins');
+const SubInstance = require('../models/Sub_ins');
+const Audit = require('../models/Audit');
+const User = require('../models/CRED_User');
 const logger = require('../util/Logger');
-const { encrypt,decrypt,getDisplayCredential,getDecryptedCredential } = require('../util/cryptography');
+const { encrypt, decrypt, getDisplayCredential, getDecryptedCredential } = require('../util/cryptography');
 const { getClientIP } = require('../util/clientIp');
 
 
 const userCredentialController = {
- // GET /api/users/credentials
-// GET /api/users/credentials?search=<searchTerm>&type=<type>&page=<page>&limit=<limit>
-// user.credentialController.js
+  // GET /api/users/credentials
+  // GET /api/users/credentials?search=<searchTerm>&type=<type>&page=<page>&limit=<limit>
+  // user.credentialController.js
 
   getCredentials: async (req, res, next) => {
     try {
@@ -29,7 +29,7 @@ const userCredentialController = {
           { createdBy: userId },
           { sharedWith: userId }
         ],
-        isDeleted: false  
+        isDeleted: false
       };
 
       const orFilters = [];
@@ -41,20 +41,20 @@ const userCredentialController = {
       }
 
       const subQuery = search
-        ? { name: { $regex: search, $options: 'i' }, isDeleted: false }  
-        : { isDeleted: false }; 
-    const [rootInstances, subInstances] = await Promise.all([
-      RootInstance.find(rootQuery).select('_id'),
-      subQuery ? SubInstance.find(subQuery).select('_id') : []
-    ]);
+        ? { name: { $regex: search, $options: 'i' }, isDeleted: false }
+        : { isDeleted: false };
+      const [rootInstances, subInstances] = await Promise.all([
+        RootInstance.find(rootQuery).select('_id'),
+        subQuery ? SubInstance.find(subQuery).select('_id') : []
+      ]);
 
-    const rootIds = rootInstances.map(r => r._id);
-    const subIds = subInstances.map(s => s._id);
+      const rootIds = rootInstances.map(r => r._id);
+      const subIds = subInstances.map(s => s._id);
 
-    if (rootIds.length > 0) orFilters.push({ rootInstance: { $in: rootIds } });
-    if (subIds.length > 0) orFilters.push({ subInstance: { $in: subIds } });
+      if (rootIds.length > 0) orFilters.push({ rootInstance: { $in: rootIds } });
+      if (subIds.length > 0) orFilters.push({ subInstance: { $in: subIds } });
 
-      const isSearchActive = search; 
+      const isSearchActive = search;
 
       let finalFilter;
       if (isSearchActive && orFilters.length === 0) {
@@ -71,11 +71,11 @@ const userCredentialController = {
 
       const [credentials, total] = await Promise.all([
         Credential.find(finalFilter)
-          .populate('rootInstance', 'serviceName') 
-          .populate({  
+          .populate('rootInstance', 'serviceName')
+          .populate({
             path: 'subInstance',
             select: 'name isDeleted',
-            match: { isDeleted: false } 
+            match: { isDeleted: false }
           })
           .populate('createdBy', 'name email')
           .populate('sharedWith', 'name email')
@@ -128,8 +128,8 @@ const userCredentialController = {
       }
 
       const credential = await Credential.findById(credentialId)
-        .populate('rootInstance', 'serviceName') 
-        .populate('subInstance', 'name isDeleted') 
+        .populate('rootInstance', 'serviceName')
+        .populate('subInstance', 'name isDeleted')
         .populate('createdBy', 'name email')
         .populate('sharedWith', 'name email');
 
@@ -243,15 +243,15 @@ const userCredentialController = {
         isDeleted: false  // ADDED: Filter active credentials only
       });
 
-    if (existingCredential) {
-      const error = new Error(
-        `You already have a credential in "${rootInstance.serviceName} → ${subInstance.name}". ` +
-        `Only one credential per subinstance is allowed. Please update your existing credential instead.`
-      );
-      error.statusCode = 409;
-      error.existingCredentialId = existingCredential._id;
-      throw error;
-    }
+      if (existingCredential) {
+        const error = new Error(
+          `You already have a credential in "${rootInstance.serviceName} → ${subInstance.name}". ` +
+          `Only one credential per subinstance is allowed. Please update your existing credential instead.`
+        );
+        error.statusCode = 409;
+        error.existingCredentialId = existingCredential._id;
+        throw error;
+      }
 
       const credential = await Credential.create({
         rootInstance: rootId,
@@ -338,7 +338,7 @@ const userCredentialController = {
         throw error;
       }
 
-    
+
       if (username) credential.username = encrypt(username);
       if (password) credential.password = encrypt(password);
       if (url !== undefined) credential.url = url;
@@ -393,7 +393,7 @@ const userCredentialController = {
 
 
 
-  
+
   // DELETE /api/users/credentials/:id
   deleteCredential: async (req, res, next) => {
     try {
@@ -441,7 +441,7 @@ const userCredentialController = {
         action: 'delete',
         ipAddress: getClientIP(req).address,
         userAgent: req.get('User-Agent'),
-        timestamp: now 
+        timestamp: now
       });
 
       res.json({
@@ -455,58 +455,58 @@ const userCredentialController = {
   },
 
   // POST /api/users/credentials/:id/share
-   
-shareCredential: async (req, res, next) => {
-  try {
-    const credentialId = req.params.id;
-    const userId = req.payload.id;
-    const { userId: targetUserId } = req.body;
-    const userRole = req.user?.role; // From authorize middleware
 
-    const credential = await Credential.findById(credentialId)
-      .populate('rootInstance', 'serviceName')
-      .populate('subInstance', 'name');
+  shareCredential: async (req, res, next) => {
+    try {
+      const credentialId = req.params.id;
+      const userId = req.payload.id;
+      const { userId: targetUserId } = req.body;
+      const userRole = req.user?.role; // From authorize middleware
 
-    if (!credential) {
-      const error = new Error('Credential not found');
-      error.statusCode = 404;
-      throw error;
-    }
+      const credential = await Credential.findById(credentialId)
+        .populate('rootInstance', 'serviceName')
+        .populate('subInstance', 'name');
 
-     if (credential.isDeleted) {
+      if (!credential) {
+        const error = new Error('Credential not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      if (credential.isDeleted) {
         const error = new Error('Cannot share deleted credential');
         error.statusCode = 403;
         throw error;
       }
-    // Owner can share, or admin can share any credential
-    const isOwner = credential.createdBy.toString() === userId;
-    const isAdmin = userRole === 'admin';
-    
-    if (!isOwner && !isAdmin) {
-      const error = new Error('Access denied');
-      error.statusCode = 403;
-      throw error;
-    }
+      // Owner can share, or admin can share any credential
+      const isOwner = credential.createdBy.toString() === userId;
+      const isAdmin = userRole === 'admin';
 
-    // Rest of your existing code remains the same...
-    const targetUser = await User.findById(targetUserId);
-    if (!targetUser) {
-      const error = new Error('User not found');
-      error.statusCode = 404;
-      throw error;
-    }
+      if (!isOwner && !isAdmin) {
+        const error = new Error('Access denied');
+        error.statusCode = 403;
+        throw error;
+      }
 
-    if (targetUserId === userId) {
-      const error = new Error('Cannot share with yourself');
-      error.statusCode = 400;
-      throw error;
-    }
+      // Rest of your existing code remains the same...
+      const targetUser = await User.findById(targetUserId);
+      if (!targetUser) {
+        const error = new Error('User not found');
+        error.statusCode = 404;
+        throw error;
+      }
 
-    if (credential.sharedWith.includes(targetUserId)) {
-      const error = new Error('Already shared with this user');
-      error.statusCode = 409;
-      throw error;
-    }
+      if (targetUserId === userId) {
+        const error = new Error('Cannot share with yourself');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (credential.sharedWith.includes(targetUserId)) {
+        const error = new Error('Already shared with this user');
+        error.statusCode = 409;
+        throw error;
+      }
 
       credential.sharedWith.push(targetUserId);
       await credential.save();
@@ -524,8 +524,8 @@ shareCredential: async (req, res, next) => {
         timestamp: new Date()  // ADDED: timestamp field
       });
 
-    const updatedCredential = await Credential.findById(credentialId)
-      .populate('sharedWith', 'name email');
+      const updatedCredential = await Credential.findById(credentialId)
+        .populate('sharedWith', 'name email');
 
       res.json({
         success: true,
@@ -542,65 +542,65 @@ shareCredential: async (req, res, next) => {
 
   // DELETE /api/users/credentials/:id/share/:userId
 
-revokeAccess: async (req, res, next) => {
-  try {
-    const credentialId = req.params.id;
-    const targetUserId = req.params.userId;
-    const userId = req.payload.id;
-    const userRole = req.user?.role; // From authorize middleware
+  revokeAccess: async (req, res, next) => {
+    try {
+      const credentialId = req.params.id;
+      const targetUserId = req.params.userId;
+      const userId = req.payload.id;
+      const userRole = req.user?.role; // From authorize middleware
 
       const credential = await Credential.findById(credentialId)
         .populate('rootInstance', 'serviceName')  // CHANGED: Removed type
         .populate('subInstance', 'name');
 
-    if (!credential) {
-      const error = new Error('Credential not found');
-      error.statusCode = 404;
-      throw error;
+      if (!credential) {
+        const error = new Error('Credential not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      // Owner can revoke, or admin can revoke from any credential
+      const isOwner = credential.createdBy.toString() === userId;
+      const isAdmin = userRole === 'admin';
+
+      if (!isOwner && !isAdmin) {
+        const error = new Error('Access denied');
+        error.statusCode = 403;
+        throw error;
+      }
+
+      if (!credential.sharedWith.includes(targetUserId)) {
+        const error = new Error('Not shared with this user');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      credential.sharedWith = credential.sharedWith.filter(
+        id => id.toString() !== targetUserId
+      );
+      await credential.save();
+
+      await Audit.create({
+        user: userId,
+        credential: credentialId,
+        credentialOwner: credential.createdBy,
+        serviceName: credential.rootInstance.serviceName,
+        subInstanceName: credential.subInstance?.name || 'N/A',
+        action: 'revoke',
+        targetUser: targetUserId,
+        ipAddress: getClientIP(req).address,
+        userAgent: req.get('User-Agent'),
+        timestamp: new Date(),
+      });
+
+      res.json({
+        success: true, message: 'Access revoked successfully'
+      });
+
+    } catch (error) {
+      next(error);
     }
-
-    // Owner can revoke, or admin can revoke from any credential
-    const isOwner = credential.createdBy.toString() === userId;
-    const isAdmin = userRole === 'admin';
-    
-    if (!isOwner && !isAdmin) {
-      const error = new Error('Access denied');
-      error.statusCode = 403;
-      throw error;
-    }
-
-    if (!credential.sharedWith.includes(targetUserId)) {
-      const error = new Error('Not shared with this user');
-      error.statusCode = 404;
-      throw error;
-    }
-
-    credential.sharedWith = credential.sharedWith.filter(
-      id => id.toString() !== targetUserId
-    );
-    await credential.save();
-
-    await Audit.create({
-      user: userId,
-      credential: credentialId,
-      credentialOwner: credential.createdBy,
-      serviceName: credential.rootInstance.serviceName,
-      subInstanceName: credential.subInstance?.name || 'N/A',
-      action: 'revoke',
-      targetUser: targetUserId,
-      ipAddress: getClientIP(req).address,
-      userAgent: req.get('User-Agent'),
-      timestamp : new Date(),
-    });
-
-    res.json({
-      success: true,      message: 'Access revoked successfully'
-    });
-
-  } catch (error) {
-    next(error);
-  }
-},
+  },
 
 
   // GET /api/users/credentials/:id/audit-logs
@@ -669,7 +669,7 @@ revokeAccess: async (req, res, next) => {
         throw error;
       }
 
-  
+
       if (credential.isDeleted) {
         const error = new Error('Cannot access deleted credential');
         error.statusCode = 403;

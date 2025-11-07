@@ -1,4 +1,4 @@
-const User = require('../Models/CRED_User');
+const User = require('../models/CRED_User');
 const bcrypt = require("bcryptjs");
 const logger = require('../util/Logger');
 
@@ -17,7 +17,7 @@ const commonController = {
         throw error;
       }
 
- 
+
 
       // 🔄 Pagination setup
       const parsedLimit = Math.max(parseInt(limit), 1);

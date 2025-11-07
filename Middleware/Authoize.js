@@ -1,4 +1,4 @@
-const User = require('../Models/CRED_User');
+const User = require('../models/CRED_User');
 
 const authorize = (allowedRoles = []) => {
   return async (req, res, next) => {
@@ -33,7 +33,7 @@ const authorize = (allowedRoles = []) => {
 };
 
 const requireAdmin = authorize(['admin']);
-const requireUser = authorize(['admin','user']);
+const requireUser = authorize(['admin', 'user']);
 
 module.exports = {
   authorize,

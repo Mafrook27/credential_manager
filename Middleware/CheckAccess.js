@@ -1,6 +1,6 @@
 
 
-const User = require('../Models/CRED_User');
+const User = require('../models/CRED_User');
 const CheckAccess = async (req, res, next) => {
   try {
     const currentUserId = req.payload?.id;
@@ -30,7 +30,7 @@ const CheckAccess = async (req, res, next) => {
 
     next();
   } catch (error) {
-   
+
     next(error); // Pass to global error handler
   }
 };

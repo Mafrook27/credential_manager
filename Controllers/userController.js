@@ -1,6 +1,6 @@
-const User = require('../Models/CRED_User');
-const Credential = require('../Models/Credential');
-const Audit = require('../Models/Audit');
+const User = require('../models/CRED_User');
+const Credential = require('../models/Credential');
+const Audit = require('../models/Audit');
 const logger = require('../util/Logger');
 
 const userController = {
@@ -10,7 +10,7 @@ const userController = {
       const { id } = req.params;
       const currentUserId = req.payload.id;
 
-     
+
       if (currentUserId !== id) {
         const error = new Error('Access denied');
         error.statusCode = 403;
@@ -40,8 +40,8 @@ const userController = {
       const { id } = req.params;
       const currentUserId = req.payload.id;
       const { name, email } = req.body;
-      
-     
+
+
       if (currentUserId !== id) {
         const error = new Error('Access denied');
         error.statusCode = 403;
@@ -55,10 +55,10 @@ const userController = {
         throw error;
       }
 
- 
+
       if (email && email !== user.email) {
-        const emailExists = await User.findOne({ 
-          email, 
+        const emailExists = await User.findOne({
+          email,
           _id: { $ne: id }
         });
         if (emailExists) {
@@ -70,7 +70,7 @@ const userController = {
       }
 
       if (name !== undefined) user.name = name;
-      
+
       await user.save();
 
       const updatedUser = await User.findById(id).select('-password');
@@ -105,7 +105,7 @@ const userController = {
         success: true,
         message: 'User deleted successfully'
       });
-      
+
       logger.info('deletedProfile', { userId: id, performedBy: currentUserId });
     } catch (error) {
       logger.error('deleteUser', { message: error.message, stack: error.stack });
@@ -119,7 +119,7 @@ const userController = {
       const { id } = req.params;
       const currentUserId = req.payload.id;
 
- 
+
       if (currentUserId !== id) {
         const error = new Error('Access denied');
         error.statusCode = 403;
@@ -127,27 +127,27 @@ const userController = {
       }
 
       const stats = {
-        totalCredentials: await Credential.countDocuments({ 
+        totalCredentials: await Credential.countDocuments({
           createdBy: id,
           isDeleted: { $ne: true }
         }),
-        sharedWithMe: await Credential.countDocuments({ 
+        sharedWithMe: await Credential.countDocuments({
           sharedWith: id,
           createdBy: { $ne: id },
           isDeleted: { $ne: true }
         }),
-        recentActivities: await Audit.countDocuments({ 
+        recentActivities: await Audit.countDocuments({
           user: id,
           timestamp: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
         })
-        
+
       };
 
       res.json({
         success: true,
         data: { stats }
       });
-      
+
       logger.info('fetchedStats', { userId: currentUserId, targetUserId: id });
     } catch (error) {
       logger.error('getStats', { message: error.message, stack: error.stack });

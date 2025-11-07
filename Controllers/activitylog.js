@@ -1,4 +1,4 @@
-const ActivityLog = require('../Models/activity');
+const ActivityLog = require('../models/activity');
 const getActivityLogs = async (req, res, next) => {
   try {
     const {
@@ -37,12 +37,12 @@ const getActivityLogs = async (req, res, next) => {
 
     // Get total count
     const total = await ActivityLog.countDocuments(query);
-    
+
     // Build sort object
     const sortField = sortby || 'timestamp';
     const sortDir = sortorder === 'asc' ? 1 : -1;
     const sortObj = { [sortField]: sortDir };
-    
+
     // Get paginated logs with dynamic sorting
     const logs = await ActivityLog.find(query)
       .sort(sortObj)

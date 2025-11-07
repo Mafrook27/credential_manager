@@ -1,5 +1,5 @@
 const bcrypt = require("bcryptjs");
-const User = require('../Models/CRED_User');
+const User = require('../models/CRED_User');
 // const { generateToken } = require('../util/generateToken');
 const logger = require('../util/Logger');
 const nodemailer = require("nodemailer");

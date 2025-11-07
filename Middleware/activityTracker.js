@@ -1,9 +1,9 @@
 const { v4: uuidv4 } = require('uuid');
 const geoip = require('geoip-lite');
-const ActivityLog = require('../Models/activity');
+const ActivityLog = require('../models/activity');
 const logger = require('../util/Logger');
-const User = require('../Models/CRED_User');
-const { getClientIP } = require('../util/clientIp');  
+const User = require('../models/CRED_User');
+const { getClientIP } = require('../util/clientIp');
 
 const config = {
   ENABLE_TRACKING: true,
@@ -13,7 +13,7 @@ const config = {
   LOG_TO_CONSOLE: false,
   ENABLE_GEOLOCATION: true,
   EXCLUDE_PATHS: [
-  
+
     '/api/h',
     '/api-docs',
     '/swagger.json',
@@ -32,21 +32,21 @@ const attachRequestId = (req, res, next) => {
 const activityTrackerMiddleware = (req, res, next) => {
   if (!config.ENABLE_TRACKING) return next();
   if (config.EXCLUDE_PATHS.some(path => req.url.startsWith(path))) return next();
-  
+
   res.on('finish', async () => {
     try {
       const responseTime = Date.now() - req.startTime;
       const isSlowResponse = responseTime > config.SLOW_THRESHOLD_MS;
-      
+
       if (config.LOG_SLOW_ONLY && !isSlowResponse) return;
-      
-      
+
+
       const ipInfo = getClientIP(req);
-      
-    
+
+
       let geolocation = null;
       if (config.ENABLE_GEOLOCATION) {
-        const geo = geoip.lookup(ipInfo.address); 
+        const geo = geoip.lookup(ipInfo.address);
         if (geo) {
           geolocation = {
             country: geo.country,
@@ -95,9 +95,9 @@ const activityTrackerMiddleware = (req, res, next) => {
 
       const operation = req.activityMeta?.operation || 'UNKNOWN_OPERATION';
       const resourceId = req.params?.id || req.params?.userId || req.params?.credentialId || null;
-      
+
       const hasError = res.statusCode >= 400;
-      
+
       const activityEntry = {
         requestId: req.requestId,
         timestamp: new Date(),
@@ -115,18 +115,18 @@ const activityTrackerMiddleware = (req, res, next) => {
         responseTime,
         isSlowResponse,
         slowThreshold: config.SLOW_THRESHOLD_MS,
-        ipAddress: ipInfo.address, 
+        ipAddress: ipInfo.address,
         userAgent: req.get('user-agent'),
         geolocation,
         hasError,
         errorMessage: hasError ? (res.locals.error?.message || 'Unknown Error') : null,
         errorStack: hasError ? (res.locals.error?.stack || null) : null
       };
-      
+
       if (config.LOG_TO_CONSOLE) {
         const indicator = hasError ? '[ERROR]' : isSlowResponse ? '[SLOW]' : '[OK]';
         const logLevel = hasError ? 'error' : isSlowResponse ? 'warn' : 'info';
-        
+
         logger[logLevel](`${indicator} ${operation}`, {
           requestId: req.requestId,
           method: req.method,
@@ -138,17 +138,17 @@ const activityTrackerMiddleware = (req, res, next) => {
           userName: userName || null,
           userRole: userRole || 'N/A',
           resourceId,
-          ip: `${ipInfo.address} (${ipInfo.version})`,  
-          location: geolocation 
-            ? `${geolocation.city || geolocation.region || geolocation.country}` 
+          ip: `${ipInfo.address} (${ipInfo.version})`,
+          location: geolocation
+            ? `${geolocation.city || geolocation.region || geolocation.country}`
             : 'unknown'
         });
       }
-      
+
       if (config.LOG_TO_DB) {
         await ActivityLog.create(activityEntry);
       }
-      
+
     } catch (error) {
       logger.error('Activity tracking failed', {
         error: error.message,
@@ -156,7 +156,7 @@ const activityTrackerMiddleware = (req, res, next) => {
       });
     }
   });
-  
+
   next();
 };
 

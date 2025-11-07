@@ -1,8 +1,8 @@
-const Credential = require('../Models/Credential');
-const RootInstance = require('../Models/Root_Ins');
-const SubInstance = require('../Models/Sub_ins');
-const Audit = require('../Models/Audit');
-const User = require('../Models/CRED_User');
+const Credential = require('../models/Credential');
+const RootInstance = require('../models/Root_Ins');
+const SubInstance = require('../models/Sub_ins');
+const Audit = require('../models/Audit');
+const User = require('../models/CRED_User');
 const mongoose = require('mongoose');
 const logger = require('../util/Logger');
 const { getClientIP } = require('../util/clientIp');
@@ -17,7 +17,7 @@ const instanceController = {
 
       const existingInstance = await RootInstance.findOne({
         serviceName: { $regex: `^${serviceName.trim()}$`, $options: 'i' }
-       
+
       });
 
       if (existingInstance) {
@@ -119,7 +119,7 @@ const instanceController = {
         const formattedInstances = instances.map(instance => {
           // ✨ FILTER: Remove soft-deleted subinstances
           const activeSubInstances = instance.subInstances.filter(sub => !sub.isDeleted);
-          
+
           return {
             rootInstanceId: instance._id,
             serviceName: instance.serviceName,
@@ -217,10 +217,10 @@ const instanceController = {
     try {
       const userId = req.payload.id;
       const { instanceId } = req.params;
-      const { serviceName} = req.body;
+      const { serviceName } = req.body;
 
-const user = await User.findById(userId).select('role');
-const isAdmin = user.role === 'admin'; 
+      const user = await User.findById(userId).select('role');
+      const isAdmin = user.role === 'admin';
       if (!mongoose.Types.ObjectId.isValid(instanceId)) {
         const error = new Error('Invalid instance ID format');
         error.statusCode = 400;
@@ -281,9 +281,9 @@ const isAdmin = user.role === 'admin';
       const userId = req.payload.id;
       const { instanceId } = req.params;
 
-const user= await User.findById(userId).select('role');
-const isAdmin = user.role === 'admin';
-console.info("seeeeeeeee",isAdmin);
+      const user = await User.findById(userId).select('role');
+      const isAdmin = user.role === 'admin';
+      console.info("seeeeeeeee", isAdmin);
       if (!mongoose.Types.ObjectId.isValid(instanceId)) {
         const error = new Error('Invalid instance ID format');
         error.statusCode = 400;
@@ -388,7 +388,7 @@ console.info("seeeeeeeee",isAdmin);
         throw error;
       }
 
-      
+
       if (name.trim().toLowerCase() === rootInstance.serviceName.toLowerCase()) {
         const error = new Error(
           `Sub-instance name cannot be the same as service name "${rootInstance.serviceName}"`
@@ -423,7 +423,7 @@ console.info("seeeeeeeee",isAdmin);
         rootInstance: instanceId,
         createdBy: userId,
         credentials: [],
-        isDeleted: false 
+        isDeleted: false
       });
 
       await RootInstance.findByIdAndUpdate(instanceId, {
@@ -472,7 +472,7 @@ console.info("seeeeeeeee",isAdmin);
       }
 
       // ✨ UPDATED: Filter out soft-deleted subinstances
-      const subInstances = await SubInstance.find({ 
+      const subInstances = await SubInstance.find({
         rootInstance: instanceId,
         isDeleted: false  // ✨ Only get active subinstances
       })
@@ -519,9 +519,9 @@ console.info("seeeeeeeee",isAdmin);
       const userId = req.payload.id;
       const { instanceId, subId } = req.params;
       const { name } = req.body;
-      
+
       const user = await User.findById(userId).select('role');
-    const isAdmin = user.role === 'admin'; 
+      const isAdmin = user.role === 'admin';
 
       if (!mongoose.Types.ObjectId.isValid(instanceId) || !mongoose.Types.ObjectId.isValid(subId)) {
         const error = new Error('Invalid instance or sub-instance ID format');
@@ -529,7 +529,7 @@ console.info("seeeeeeeee",isAdmin);
         throw error;
       }
 
-  
+
       if (!isAdmin) {
         const error = new Error('You don\'t have permission to edit subinstances');
         error.statusCode = 403;
@@ -555,7 +555,7 @@ console.info("seeeeeeeee",isAdmin);
         throw error;
       }
 
-   
+
       if (subInstance.isDeleted) {
         const error = new Error('Cannot update deleted subinstance');
         error.statusCode = 400;
