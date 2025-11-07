@@ -1,5 +1,6 @@
 const Session = require("../models/Session");
 const { generateAccessToken, generateRefreshToken } = require("./jwtUtil");
+const logger = require("../util/Logger");
 
 // Get refresh token max time from env (default 4 hours)
 const getRefreshMaxTime = () => {
@@ -16,8 +17,13 @@ const getRefreshMaxTime = () => {
 };
 
 const createSession = async (payload, userAgent = null, ipAddress = null) => {
-  // Delete previous sessions (enforce single login per user)
-  await Session.deleteMany({ userId: payload.id });
+  // ✅ Mark old sessions as inactive instead of deleting
+  await Session.updateMany(
+    { userId: payload.id },
+    { active: false }
+  );
+
+  logger.info(`Marked previous sessions as inactive for user ${payload.id}`);
 
   const refreshToken = generateRefreshToken(payload);
   const expiresAt = new Date(Date.now() + getRefreshMaxTime());
@@ -28,8 +34,11 @@ const createSession = async (payload, userAgent = null, ipAddress = null) => {
     expiresAt,
     refreshCount: 0,
     userAgent,
-    ipAddress
+    ipAddress,
+    active: true  // ✅ New session is active
   });
+
+  logger.info(`Created new active session for user ${payload.id}`);
 
   const accessToken = generateAccessToken(payload);
   return { accessToken, refreshToken, session };
