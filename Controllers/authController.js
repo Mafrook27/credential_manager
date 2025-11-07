@@ -11,12 +11,19 @@ dotenv.config();
 
 
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // Use STARTTLS
   auth: {
     user: process.env.AUTH_ID,
-
     pass: process.env.MAIL_PASS,
-  }
+  },
+  tls: {
+    rejectUnauthorized: false // Allow self-signed certificates
+  },
+  connectionTimeout: 10000, // 10 seconds timeout
+  greetingTimeout: 10000,
+  socketTimeout: 10000
 });
 
 
@@ -374,13 +381,24 @@ const auth = {
       // Try Resend first, fallback to Gmail if fails
       try {
         logger.info(`📧 Attempting to send reset email to ${email} via Resend...`);
+
+        // Use the verified email from Resend account as 'from'
+        const fromEmail = process.env.RESEND_FROM || "onboarding@resend.dev";
+
         const { data, error } = await resend.emails.send({
-          from: "onboarding@resend.dev",
+          from: fromEmail,
           to: email,
-          subject: "Password Reset Code",
+          subject: "Password Reset Code - SparkLMS",
           html: `
-            <p>Your password reset code is <strong>${token}</strong>.</p>
-            <p>This code will expire in <b>10 minutes</b>.</p>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #2962FF;">Password Reset Request</h2>
+              <p>Your password reset code is:</p>
+              <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
+                ${token}
+              </div>
+              <p>This code will expire in <strong>10 minutes</strong>.</p>
+              <p style="color: #666; font-size: 14px;">If you didn't request this, please ignore this email.</p>
+            </div>
           `,
         });
 
@@ -398,12 +416,20 @@ const auth = {
 
         try {
           logger.info(`📧 Attempting Gmail fallback for ${email}...`);
-          await transporter.sendMail({
+
+          // Add timeout to prevent hanging
+          const emailPromise = transporter.sendMail({
             from: process.env.AUTH_ID,
             to: email,
             subject: "Password Reset Code",
             text: `Your password reset code is: ${token}. It will expire in 10 minutes.`,
           });
+
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Email timeout - SMTP may be blocked by hosting provider')), 15000)
+          );
+
+          await Promise.race([emailPromise, timeoutPromise]);
 
           logger.info(`📩 Reset email sent to ${email} via Gmail fallback`);
         } catch (gmailErr) {
@@ -413,6 +439,12 @@ const auth = {
             authId: process.env.AUTH_ID ? 'SET' : 'NOT SET',
             mailPass: process.env.MAIL_PASS ? 'SET' : 'NOT SET'
           });
+
+          // If SMTP is blocked, suggest alternative
+          if (gmailErr.message.includes('timeout') || gmailErr.code === 'ETIMEDOUT' || gmailErr.code === 'ECONNREFUSED') {
+            logger.error('🚫 SMTP appears to be blocked by hosting provider. Consider using Resend with verified domain.');
+          }
+
           throw new Error('Failed to send email. Please try again later.');
         }
       }
