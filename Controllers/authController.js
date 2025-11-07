@@ -378,15 +378,12 @@ const auth = {
 
 
 
-      // Try Resend first, fallback to Gmail if fails
+      // Resend sandbox mode: only works for verified email
       try {
-        logger.info(`📧 Attempting to send reset email to ${email} via Resend...`);
-
-        // Use the verified email from Resend account as 'from'
-        const fromEmail = process.env.RESEND_FROM || "onboarding@resend.dev";
+        logger.info(`📧 Sending reset email to ${email} via Resend...`);
 
         const { data, error } = await resend.emails.send({
-          from: fromEmail,
+          from: "onboarding@resend.dev", // Sandbox sender
           to: email,
           subject: "Password Reset Code - SparkLMS",
           html: `
@@ -403,50 +400,17 @@ const auth = {
         });
 
         if (error) {
-          logger.error(`❌ Resend error details:`, error);
+          logger.error(`❌ Resend error:`, error);
           throw error;
         }
 
-        logger.info(`✅ Reset email sent to ${email} via Resend`, { data });
+        logger.info(`✅ Reset email sent via Resend`);
       } catch (resendErr) {
-        logger.warn(`⚠️ Resend failed: ${resendErr.message}. Falling back to Gmail.`, {
-          error: resendErr,
-          resendApiKey: process.env.RESEND_API_KEY ? 'SET' : 'NOT SET'
+        logger.error(`❌ Email sending failed:`, {
+          error: resendErr.message,
+          note: 'Resend sandbox mode only sends to verified email. SMTP is blocked by Render.'
         });
-
-        try {
-          logger.info(`📧 Attempting Gmail fallback for ${email}...`);
-
-          // Add timeout to prevent hanging
-          const emailPromise = transporter.sendMail({
-            from: process.env.AUTH_ID,
-            to: email,
-            subject: "Password Reset Code",
-            text: `Your password reset code is: ${token}. It will expire in 10 minutes.`,
-          });
-
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Email timeout - SMTP may be blocked by hosting provider')), 15000)
-          );
-
-          await Promise.race([emailPromise, timeoutPromise]);
-
-          logger.info(`📩 Reset email sent to ${email} via Gmail fallback`);
-        } catch (gmailErr) {
-          logger.error(`❌ Gmail fallback also failed:`, {
-            message: gmailErr.message,
-            code: gmailErr.code,
-            authId: process.env.AUTH_ID ? 'SET' : 'NOT SET',
-            mailPass: process.env.MAIL_PASS ? 'SET' : 'NOT SET'
-          });
-
-          // If SMTP is blocked, suggest alternative
-          if (gmailErr.message.includes('timeout') || gmailErr.code === 'ETIMEDOUT' || gmailErr.code === 'ECONNREFUSED') {
-            logger.error('🚫 SMTP appears to be blocked by hosting provider. Consider using Resend with verified domain.');
-          }
-
-          throw new Error('Failed to send email. Please try again later.');
-        }
+        throw new Error('Email service unavailable. Please contact support.');
       }
 
       // In development, also return token for testing
