@@ -82,11 +82,6 @@ module.exports = router;
  *                 type: string
  *                 description: Name of the service
  *                 example: "AWS"
- *               type:
- *                 type: string
- *                 description: Type of service
- *                 example: "cloud"
- *                 default: "other"
  *     responses:
  *       201:
  *         description: Service created successfully
@@ -107,9 +102,6 @@ module.exports = router;
  *                     serviceName:
  *                       type: string
  *                       example: "AWS"
- *                     type:
- *                       type: string
- *                       example: "cloud"
  *                     subInstancesCount:
  *                       type: number
  *                       example: 0
@@ -142,9 +134,6 @@ module.exports = router;
  *                     serviceName:
  *                       type: string
  *                       example: "AWS"
- *                     type:
- *                       type: string
- *                       example: "cloud"
  *                     subInstancesCount:
  *                       type: number
  *                       example: 3
@@ -215,9 +204,6 @@ module.exports = router;
  *                       serviceName:
  *                         type: string
  *                         example: "AWS"
- *                       type:
- *                         type: string
- *                         example: "cloud"
  *                       createdAt:
  *                         type: string
  *                         format: date-time
@@ -241,6 +227,7 @@ module.exports = router;
  *     tags: [Instance]
  *     security:
  *       - bearerAuth: []
+ *     description: Update a root instance (service name). Only admins can update services.
  *     parameters:
  *       - in: path
  *         name: instanceId
@@ -260,10 +247,6 @@ module.exports = router;
  *                 type: string
  *                 description: Updated service name
  *                 example: "AWS Cloud"
- *               type:
- *                 type: string
- *                 description: Updated service type
- *                 example: "cloud"
  *     responses:
  *       200:
  *         description: Service updated successfully
@@ -284,9 +267,6 @@ module.exports = router;
  *                     serviceName:
  *                       type: string
  *                       example: "AWS Cloud"
- *                     type:
- *                       type: string
- *                       example: "cloud"
  *                     createdAt:
  *                       type: string
  *                       format: date-time
@@ -299,7 +279,7 @@ module.exports = router;
  *       401:
  *         description: Unauthorized - Invalid or missing token
  *       403:
- *         description: Forbidden - Cannot update service in use by other users (non-admin)
+ *         description: Forbidden - Only admins can update services
  *       404:
  *         description: Root instance not found
  */
@@ -312,6 +292,7 @@ module.exports = router;
  *     tags: [Instance]
  *     security:
  *       - bearerAuth: []
+ *     description: Delete a root instance (service) and all related data. Only admins can delete services. Cannot delete if there are active sub-instances.
  *     parameters:
  *       - in: path
  *         name: instanceId
@@ -347,11 +328,11 @@ module.exports = router;
  *                       type: number
  *                       example: 10
  *       400:
- *         description: Invalid instance ID format
+ *         description: Invalid instance ID format or service has active sub-instances
  *       401:
  *         description: Unauthorized - Invalid or missing token
  *       403:
- *         description: Forbidden - Cannot delete service in use by other users (non-admin)
+ *         description: Forbidden - Only admins can delete services
  *       404:
  *         description: Root instance not found
  */
@@ -360,7 +341,7 @@ module.exports = router;
  * @swagger
  * /api/instances/{instanceId}/sub-instances:
  *   post:
- *     summary: Create a new sub-instance (folder) under a root instance
+ *     summary: Create a new sub-instance (subinstance) under a root instance
  *     tags: [Instance]
  *     security:
  *       - bearerAuth: []
@@ -383,11 +364,11 @@ module.exports = router;
  *             properties:
  *               name:
  *                 type: string
- *                 description: Name of the sub-instance (folder)
+ *                 description: Name of the sub-instance (subinstance)
  *                 example: "Production Environment"
  *     responses:
  *       201:
- *         description: Folder created successfully
+ *         description: Subinstance created successfully
  *         content:
  *           application/json:
  *             schema:
@@ -420,7 +401,7 @@ module.exports = router;
  *                       example: true
  *                 message:
  *                   type: string
- *                   example: "Folder added to list successfully"
+ *                   example: "subinstance added to list successfully"
  *       200:
  *         description: Using existing subinstance from list
  *         content:
@@ -472,6 +453,7 @@ module.exports = router;
  *     tags: [Instance]
  *     security:
  *       - bearerAuth: []
+ *     description: List all active (non-deleted) sub-instances under a root instance. Excludes soft-deleted subinstances.
  *     parameters:
  *       - in: path
  *         name: instanceId
@@ -500,9 +482,6 @@ module.exports = router;
  *                     serviceName:
  *                       type: string
  *                       example: "AWS"
- *                     type:
- *                       type: string
- *                       example: "cloud"
  *                     createdBy:
  *                       type: object
  *                       properties:
@@ -560,10 +539,11 @@ module.exports = router;
  * @swagger
  * /api/instances/{instanceId}/sub-instances/{subId}:
  *   put:
- *     summary: Update a sub-instance (folder)
+ *     summary: Update a sub-instance (subinstance)
  *     tags: [Instance]
  *     security:
  *       - bearerAuth: []
+ *     description: Update a sub-instance (subinstance) name. Only admins can update subinstances. Cannot update soft-deleted subinstances.
  *     parameters:
  *       - in: path
  *         name: instanceId
@@ -594,7 +574,7 @@ module.exports = router;
  *                 example: "Production Environment Updated"
  *     responses:
  *       200:
- *         description: Folder updated successfully
+ *         description: Subinstance updated successfully
  *         content:
  *           application/json:
  *             schema:
@@ -621,13 +601,13 @@ module.exports = router;
  *                       example: "2025-10-17T12:00:00.000Z"
  *                 message:
  *                   type: string
- *                   example: "Folder updated successfully"
+ *                   example: "Subinstance updated successfully"
  *       400:
- *         description: Validation error, duplicate name, or name same as service name
+ *         description: Validation error, duplicate name, name same as service name, or subinstance is deleted
  *       401:
  *         description: Unauthorized - Invalid or missing token
  *       403:
- *         description: Forbidden - Cannot update subinstance in use by other users (non-admin)
+ *         description: Forbidden - Only admins can update subinstances
  *       404:
  *         description: Root instance or sub-instance not found
  */
@@ -636,10 +616,11 @@ module.exports = router;
  * @swagger
  * /api/instances/{instanceId}/sub-instances/{subId}:
  *   delete:
- *     summary: Delete a sub-instance (folder) and all related credentials
+ *     summary: Delete a sub-instance (subinstance) - soft delete
  *     tags: [Instance]
  *     security:
  *       - bearerAuth: []
+ *     description: Soft delete a sub-instance (subinstance). The subinstance is marked as deleted but not permanently removed. Only admins can delete subinstances. Creates an audit log entry.
  *     parameters:
  *       - in: path
  *         name: instanceId
@@ -657,7 +638,7 @@ module.exports = router;
  *         example: "507f1f77bcf86cd799439022"
  *     responses:
  *       200:
- *         description: Folder and all related credentials deleted successfully
+ *         description: Subinstance disabled successfully (soft delete)
  *         content:
  *           application/json:
  *             schema:
@@ -668,22 +649,25 @@ module.exports = router;
  *                   example: true
  *                 message:
  *                   type: string
- *                   example: "Folder and all related credentials deleted successfully"
+ *                   example: "subinstance disabled successfully (soft delete triggered)"
  *                 deleted:
  *                   type: object
  *                   properties:
  *                     subInstance:
  *                       type: number
  *                       example: 1
- *                     credentials:
- *                       type: number
- *                       example: 5
+ *                     isDeleted:
+ *                       type: boolean
+ *                       example: true
+ *                     frontendAction:
+ *                       type: string
+ *                       example: "Hide from UI, disable all operations"
  *       400:
- *         description: Invalid instance or sub-instance ID format
+ *         description: Invalid instance or sub-instance ID format, or subinstance already deleted
  *       401:
  *         description: Unauthorized - Invalid or missing token
  *       403:
- *         description: Forbidden - Cannot delete subinstance in use by other users (non-admin)
+ *         description: Forbidden - Only admins can delete subinstances
  *       404:
  *         description: Root instance or sub-instance not found
  */

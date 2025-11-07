@@ -22,7 +22,11 @@ app.use(cookieParser());
 // Defaults for local dev
 const defaultAllowedOrigins = [
   "http://localhost:5173",
-  "http://localhost:5000"
+  "http://localhost:5000",
+  "http://localhost:3000",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5000",
+  "http://127.0.0.1:3000"
 ];
 
 // Support either ALLOWED_ORIGINS (comma-separated) or legacy FRONTEND_URL
@@ -42,14 +46,21 @@ const allowedOrigins = Array.from(new Set([
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow non-browser requests with no Origin (e.g., curl, server-to-server)
+    // Allow non-browser requests with no Origin (e.g., curl, server-to-server, Postman, Hoppscotch)
     if (!origin) return callback(null, true);
+    
+    // In development, allow all origins for testing tools
+    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+      return callback(null, true);
+    }
+    
+    // In production, check allowed origins
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 };
 
 app.use(cors(corsOptions));
@@ -89,11 +100,13 @@ app.use((err, req, res, next) => {
     requestId: req.requestId,
     message: err.message,
     statusCode: statusCode,
+    code: err.code || null,
     stack: err.stack
   });
   res.status(statusCode).json({
     success: false,
-    message: err.message || 'Server Error'
+    message: err.message || 'Server Error',
+    code: err.code || null  // ✅ IMPORTANT: Send error code to frontend
   });
 });
 

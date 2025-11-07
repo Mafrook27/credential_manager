@@ -5,7 +5,7 @@ const mongoose = require("mongoose");
 const logger  =require('../util/Logger');
 const auditSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: "C_User", required: true },
-  credential: { type: mongoose.Schema.Types.ObjectId, ref: "Credential", required: true },
+  credential: { type: mongoose.Schema.Types.ObjectId, ref: "Credential" }, // Optional - for subinstance deletion logs
   credentialOwner: { type: mongoose.Schema.Types.ObjectId, ref: "C_User", required: true },
   serviceName: { type: String, required: true },
   subInstanceName: { type: String }, // Store sub-instance name for historical tracking

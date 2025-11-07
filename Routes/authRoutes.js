@@ -303,6 +303,45 @@ router.post('/login', track('USER_LOGIN'),validate(loginSchema), auth.login);
 
 
 router.post('/logout', track('USER_LOGOUT') ,authcate ,auth.logout);
+
+/**
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     summary: Refresh access token
+ *     description: Get a new access token using the refresh token stored in cookies
+ *     tags: [Authentication]
+ *     responses:
+ *       200:
+ *         description: Access token refreshed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Access token refreshed"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     refreshCount:
+ *                       type: number
+ *                       example: 1
+ *                     maxRefreshCount:
+ *                       type: number
+ *                       example: 3
+ *       401:
+ *         description: No refresh token provided
+ *       403:
+ *         description: Invalid or expired refresh token, or refresh limit reached
+ *       500:
+ *         description: Server error
+ */
+router.post('/refresh', track('TOKEN_REFRESH'), auth.refreshToken);
 /**
  * @swagger
  * /api/auth/reset-password:

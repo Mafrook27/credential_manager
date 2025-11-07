@@ -127,10 +127,14 @@ const userController = {
       }
 
       const stats = {
-        totalCredentials: await Credential.countDocuments({ createdBy: id }),
+        totalCredentials: await Credential.countDocuments({ 
+          createdBy: id,
+          isDeleted: { $ne: true }
+        }),
         sharedWithMe: await Credential.countDocuments({ 
           sharedWith: id,
-          createdBy: { $ne: id }
+          createdBy: { $ne: id },
+          isDeleted: { $ne: true }
         }),
         recentActivities: await Audit.countDocuments({ 
           user: id,

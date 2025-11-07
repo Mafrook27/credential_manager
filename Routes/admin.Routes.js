@@ -19,6 +19,7 @@ router.get('/users', track('ADMIN_READ_ALL_USERS'), adminUserController.getAllUs
 router.post('/users', track('ADMIN_CREATE_USER'), adminUserController.createUser); 
 router.get('/users/permission/:id', track('ADMIN_APPROVE_USER'), adminUserController.approveUser);
 router.get('/users/block/:id', track('ADMIN_BLOCK_USER'), adminUserController.blockUser);
+router.get('/users/unblock/:id', track('ADMIN_UNBLOCK_USER'), adminUserController.unblockUser);
 router.get('/users/:id', track('ADMIN_READ_USER_PROFILE'), adminUserController.getUserProfile);
 router.put('/users/:id', track('ADMIN_UPDATE_USER'), adminUserController.updateUser);
 router.delete('/users/:id', track('ADMIN_DELETE_USER'), adminUserController.deleteUser);
@@ -196,18 +197,18 @@ module.exports = router;
  *               name:
  *                 type: string
  *                 description: Full name of the user
- *                 example: "John Doe"
+ *                 example: "Jane Smith"
  *               email:
  *                 type: string
  *                 format: email
  *                 description: User's email address (must be unique)
- *                 example: "john@example.com"
+ *                 example: "jane.smith@example.com"
  *               password:
  *                 type: string
  *                 format: password
  *                 minLength: 6
  *                 description: User's password (will be hashed)
- *                 example: "tempPass123"
+ *                 example: "SecurePass123!"
  *               role:
  *                 type: string
  *                 enum: [user, admin]
@@ -217,14 +218,72 @@ module.exports = router;
  *     responses:
  *       201:
  *         description: User created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "User created successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           example: "507f1f77bcf86cd799439011"
+ *                         name:
+ *                           type: string
+ *                           example: "Jane Smith"
+ *                         email:
+ *                           type: string
+ *                           example: "jane.smith@example.com"
+ *                         role:
+ *                           type: string
+ *                           example: "user"
+ *                         isVerified:
+ *                           type: boolean
+ *                           example: true
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                           example: "2024-01-15T10:30:00.000Z"
  *       400:
  *         description: Bad request - Missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Missing required fields: name, email, password"
  *       401:
  *         description: Unauthorized - Invalid or missing token
  *       403:
  *         description: Forbidden - User is not an admin
  *       409:
  *         description: Conflict - Email already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Email already exists"
  *       500:
  *         description: Server error
  */
@@ -755,6 +814,88 @@ module.exports = router;
 
 /**
  * @swagger
+ * /api/admin/users/block/{id}:
+ *   get:
+ *     summary: Block user (Admin only)
+ *     description: Block a user account to prevent them from accessing the system. Sets isActive to false.
+ *     tags: [Admin - User Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID to block
+ *         example: "507f1f77bcf86cd799439011"
+ *     responses:
+ *       200:
+ *         description: User blocked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "User john@example.com blocked successfully."
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+
+/**
+ * @swagger
+ * /api/admin/users/unblock/{id}:
+ *   get:
+ *     summary: Unblock user (Admin only)
+ *     description: Unblock a previously blocked user account to restore their access. Sets isActive to true.
+ *     tags: [Admin - User Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID to unblock
+ *         example: "507f1f77bcf86cd799439011"
+ *     responses:
+ *       200:
+ *         description: User unblocked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "User john@example.com unblocked successfully."
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+
+/**
+ * @swagger
  * /api/admin/access:
  *   get:
  *     summary: Get user access details (Admin only)
@@ -1110,7 +1251,7 @@ module.exports = router;
  * /api/admin/credentials:
  *   get:
  *     summary: Get all credentials (Admin only)
- *     description: Retrieve paginated list of all credentials in the system with search and filter options
+ *     description: Retrieve paginated list of all active (non-deleted) credentials in the system with search options. Excludes soft-deleted credentials and credentials in deleted subinstances.
  *     tags: [Admin - Credential Management]
  *     security:
  *       - bearerAuth: []
@@ -1120,26 +1261,24 @@ module.exports = router;
  *         schema:
  *           type: string
  *         description: Search by service name or sub instance name
- *       - in: query
- *         name: type
- *         schema:
- *           type: string
- *         description: Filter by credential type
+ *         example: "AWS"
  *       - in: query
  *         name: page
  *         schema:
  *           type: integer
  *           default: 1
  *         description: Page number
+ *         example: 1
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
  *           default: 5
  *         description: Number of credentials per page
+ *         example: 5
  *     responses:
  *       200:
- *         description: List of credentials
+ *         description: List of credentials retrieved successfully
  *         content:
  *           application/json:
  *             schema:
@@ -1151,9 +1290,11 @@ module.exports = router;
  *                 count:
  *                   type: integer
  *                   example: 2
+ *                   description: Number of credentials in current page
  *                 total:
  *                   type: integer
- *                   example: 100
+ *                   example: 10
+ *                   description: Total number of credentials
  *                 page:
  *                   type: integer
  *                   example: 1
@@ -1162,7 +1303,7 @@ module.exports = router;
  *                   example: 5
  *                 totalPages:
  *                   type: integer
- *                   example: 20
+ *                   example: 2
  *                 data:
  *                   type: object
  *                   properties:
@@ -1170,6 +1311,54 @@ module.exports = router;
  *                       type: array
  *                       items:
  *                         $ref: '#/components/schemas/Credential'
+ *             example:
+ *               success: true
+ *               count: 2
+ *               total: 10
+ *               page: 1
+ *               limit: 5
+ *               totalPages: 2
+ *               data:
+ *                 credentials:
+ *                   - _id: "507f1f77bcf86cd799439011"
+ *                     rootInstance:
+ *                       _id: "507f1f77bcf86cd799439022"
+ *                       serviceName: "AWS Console"
+ *                     subInstance:
+ *                       _id: "507f1f77bcf86cd799439033"
+ *                       name: "Production"
+ *                     credentialData:
+ *                       username: "a****n@company.com"
+ *                       password: "a1b2c3d4e5f6:1234567890abcdef"
+ *                       url: "https://console.aws.amazon.com"
+ *                       notes: "Production AWS admin account"
+ *                     sharedWith: []
+ *                     createdBy:
+ *                       _id: "507f1f77bcf86cd799439001"
+ *                       name: "John Doe"
+ *                       email: "john@example.com"
+ *                     createdAt: "2024-01-15T10:30:00.000Z"
+ *                   - _id: "507f1f77bcf86cd799439012"
+ *                     rootInstance:
+ *                       _id: "507f1f77bcf86cd799439023"
+ *                       serviceName: "GitHub"
+ *                     subInstance:
+ *                       _id: "507f1f77bcf86cd799439034"
+ *                       name: "Organization"
+ *                     credentialData:
+ *                       username: "d****r@company.com"
+ *                       password: "b2c3d4e5f6a7:0987654321fedcba"
+ *                       url: "https://github.com"
+ *                       notes: "GitHub organization admin"
+ *                     sharedWith:
+ *                       - _id: "507f1f77bcf86cd799439002"
+ *                         name: "Jane Smith"
+ *                         email: "jane@example.com"
+ *                     createdBy:
+ *                       _id: "507f1f77bcf86cd799439001"
+ *                       name: "John Doe"
+ *                       email: "john@example.com"
+ *                     createdAt: "2024-01-14T09:20:00.000Z"
  *       401:
  *         description: Unauthorized
  *       403:
@@ -1183,7 +1372,7 @@ module.exports = router;
  * /api/admin/credentials:
  *   post:
  *     summary: Create credential (Admin only)
- *     description: Admin can create credentials for their own account. Requires rootId and subId as query parameters to specify the root instance and sub-instance.
+ *     description: Admin can create credentials for their own account. Requires rootId and subId as query parameters to specify the root instance and sub-instance. Cannot create credentials in soft-deleted subinstances.
  *     tags: [Admin - Credential Management]
  *     security:
  *       - bearerAuth: []
@@ -1194,14 +1383,14 @@ module.exports = router;
  *         schema:
  *           type: string
  *         description: Root instance ID (service)
- *         example: "507f1f77bcf86cd799439011"
+ *         example: "507f1f77bcf86cd799439022"
  *       - in: query
  *         name: subId
  *         required: true
  *         schema:
  *           type: string
- *         description: Sub-instance ID (folder)
- *         example: "507f1f77bcf86cd799439022"
+ *         description: Sub-instance ID (subinstance)
+ *         example: "507f1f77bcf86cd799439033"
  *     requestBody:
  *       required: true
  *       content:
@@ -1233,6 +1422,11 @@ module.exports = router;
  *                 maxLength: 500
  *                 description: Additional notes (optional)
  *                 example: "Production AWS admin account"
+ *           example:
+ *             username: "admin@company.com"
+ *             password: "SecureP@ssw0rd123"
+ *             url: "https://console.aws.amazon.com"
+ *             notes: "Production AWS admin account"
  *     responses:
  *       201:
  *         description: Credential created successfully
@@ -1252,8 +1446,31 @@ module.exports = router;
  *                 message:
  *                   type: string
  *                   example: "Credential created successfully"
+ *             example:
+ *               success: true
+ *               data:
+ *                 credential:
+ *                   _id: "507f1f77bcf86cd799439011"
+ *                   rootInstance:
+ *                     _id: "507f1f77bcf86cd799439022"
+ *                     serviceName: "AWS Console"
+ *                   subInstance:
+ *                     _id: "507f1f77bcf86cd799439033"
+ *                     name: "Production"
+ *                   credentialData:
+ *                     username: "a****n@company.com"
+ *                     password: "a1b2c3d4e5f6:1234567890abcdef"
+ *                     url: "https://console.aws.amazon.com"
+ *                     notes: "Production AWS admin account"
+ *                   sharedWith: []
+ *                   createdBy:
+ *                     _id: "507f1f77bcf86cd799439001"
+ *                     name: "John Doe"
+ *                     email: "john@example.com"
+ *                   createdAt: "2024-01-15T10:30:00.000Z"
+ *               message: "Credential created successfully"
  *       400:
- *         description: Validation error
+ *         description: Validation error or missing required parameters
  *         content:
  *           application/json:
  *             schema:
@@ -1264,16 +1481,51 @@ module.exports = router;
  *                   example: false
  *                 message:
  *                   type: string
- *                   example: "Validation failed"
- *                 errors:
- *                   type: array
- *                   items:
- *                     type: string
- *                   example: ["\"serviceName\" is required", "\"password\" is required"]
+ *             examples:
+ *               missingParams:
+ *                 value:
+ *                   success: false
+ *                   message: "rootId and subId are required"
+ *               missingFields:
+ *                 value:
+ *                   success: false
+ *                   message: "username and password are required"
  *       401:
  *         description: Unauthorized - Invalid or missing token
  *       403:
- *         description: Access denied - Admin role required
+ *         description: Access denied - Admin role required or cannot create in deleted subinstance
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Cannot create credential in deleted subinstance"
+ *       404:
+ *         description: Root instance or sub-instance not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *             examples:
+ *               rootNotFound:
+ *                 value:
+ *                   success: false
+ *                   message: "Root instance not found"
+ *               subNotFound:
+ *                 value:
+ *                   success: false
+ *                   message: "Sub-instance not found"
  *       500:
  *         description: Server error
  */
@@ -1291,7 +1543,7 @@ module.exports = router;
  * /api/admin/credentials/{id}:
  *   get:
  *     summary: Get any credential (Admin only)
- *     description: Retrieve details of any credential in the system (password remains encrypted)
+ *     description: Retrieve details of any credential in the system (password remains encrypted). Cannot access soft-deleted credentials or credentials in deleted subinstances.
  *     tags: [Admin - Credential Management]
  *     security:
  *       - bearerAuth: []
@@ -1302,9 +1554,10 @@ module.exports = router;
  *         schema:
  *           type: string
  *         description: Credential ID
+ *         example: "507f1f77bcf86cd799439011"
  *     responses:
  *       200:
- *         description: Credential details
+ *         description: Credential details retrieved successfully
  *         content:
  *           application/json:
  *             schema:
@@ -1318,12 +1571,67 @@ module.exports = router;
  *                   properties:
  *                     displaycred:
  *                       $ref: '#/components/schemas/Credential'
+ *             example:
+ *               success: true
+ *               data:
+ *                 displaycred:
+ *                   _id: "507f1f77bcf86cd799439011"
+ *                   rootInstance:
+ *                     _id: "507f1f77bcf86cd799439022"
+ *                     serviceName: "AWS Console"
+ *                   subInstance:
+ *                     _id: "507f1f77bcf86cd799439033"
+ *                     name: "Production"
+ *                   credentialData:
+ *                     username: "a****n@company.com"
+ *                     password: "a1b2c3d4e5f6:1234567890abcdef"
+ *                     url: "https://console.aws.amazon.com"
+ *                     notes: "Production AWS admin account"
+ *                   sharedWith:
+ *                     - _id: "507f1f77bcf86cd799439002"
+ *                       name: "Jane Smith"
+ *                       email: "jane@example.com"
+ *                   createdBy:
+ *                     _id: "507f1f77bcf86cd799439001"
+ *                     name: "John Doe"
+ *                     email: "john@example.com"
+ *                   createdAt: "2024-01-15T10:30:00.000Z"
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Access denied
+ *         description: Access denied - Cannot access deleted credential or credential in deleted subinstance
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *             examples:
+ *               deletedCredential:
+ *                 value:
+ *                   success: false
+ *                   message: "Cannot access deleted credential"
+ *               deletedSubinstance:
+ *                 value:
+ *                   success: false
+ *                   message: "Cannot access credential in deleted subinstance"
  *       404:
  *         description: Credential not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Credential not found"
  *       500:
  *         description: Server error
  */
@@ -1333,7 +1641,7 @@ module.exports = router;
  * /api/admin/credentials/{credId}:
  *   put:
  *     summary: Update any credential (Admin only)
- *     description: Update credential's username, password, url, and notes. Service name and sub-instance cannot be changed.
+ *     description: Update credential's username, password, url, and notes. Service name and sub-instance cannot be changed. Cannot update soft-deleted credentials or credentials in deleted subinstances.
  *     tags: [Admin - Credential Management]
  *     security:
  *       - bearerAuth: []
@@ -1344,7 +1652,7 @@ module.exports = router;
  *         schema:
  *           type: string
  *         description: Credential ID
- *         example: "507f1f77bcf86cd799439033"
+ *         example: "507f1f77bcf86cd799439011"
  *     requestBody:
  *       required: false
  *       content:
@@ -1355,19 +1663,24 @@ module.exports = router;
  *               username:
  *                 type: string
  *                 description: Updated username (will be encrypted)
- *                 example: "updated@example.com"
+ *                 example: "updated.admin@company.com"
  *               password:
  *                 type: string
  *                 description: Updated password (will be encrypted)
- *                 example: "UpdatedP@ssw0rd123"
+ *                 example: "NewSecureP@ssw0rd456"
  *               url:
  *                 type: string
  *                 description: Updated service URL
- *                 example: "https://updated.com"
+ *                 example: "https://console.aws.amazon.com"
  *               notes:
  *                 type: string
  *                 description: Updated notes
- *                 example: "Updated notes"
+ *                 example: "Updated production credentials"
+ *           example:
+ *             username: "updated.admin@company.com"
+ *             password: "NewSecureP@ssw0rd456"
+ *             url: "https://console.aws.amazon.com"
+ *             notes: "Updated production credentials"
  *     responses:
  *       200:
  *         description: Credential updated successfully
@@ -1387,10 +1700,52 @@ module.exports = router;
  *                 message:
  *                   type: string
  *                   example: "Credential updated successfully"
+ *             example:
+ *               success: true
+ *               data:
+ *                 credential:
+ *                   _id: "507f1f77bcf86cd799439011"
+ *                   rootInstance:
+ *                     _id: "507f1f77bcf86cd799439022"
+ *                     serviceName: "AWS Console"
+ *                   subInstance:
+ *                     _id: "507f1f77bcf86cd799439033"
+ *                     name: "Production"
+ *                   credentialData:
+ *                     username: "u****d@company.com"
+ *                     password: "b2c3d4e5f6a7:0987654321fedcba"
+ *                     url: "https://console.aws.amazon.com"
+ *                     notes: "Updated production credentials"
+ *                   sharedWith: []
+ *                   createdBy:
+ *                     _id: "507f1f77bcf86cd799439001"
+ *                     name: "John Doe"
+ *                     email: "john@example.com"
+ *                   createdAt: "2024-01-15T10:30:00.000Z"
+ *               message: "Credential updated successfully"
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Access denied
+ *         description: Access denied - Cannot update deleted credential or credential in deleted subinstance
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *             examples:
+ *               deletedCredential:
+ *                 value:
+ *                   success: false
+ *                   message: "Cannot update deleted credential"
+ *               deletedSubinstance:
+ *                 value:
+ *                   success: false
+ *                   message: "Cannot update credential in deleted subinstance"
  *       404:
  *         description: Credential not found
  *       500:
@@ -1402,7 +1757,7 @@ module.exports = router;
  * /api/admin/credentials/{id}:
  *   delete:
  *     summary: Delete any credential (Admin only)
- *     description: Permanently delete any credential from the system
+ *     description: Soft delete any credential from the system. The credential is marked as deleted but not permanently removed from the database. Creates an audit log entry.
  *     tags: [Admin - Credential Management]
  *     security:
  *       - bearerAuth: []
@@ -1413,6 +1768,7 @@ module.exports = router;
  *         schema:
  *           type: string
  *         description: Credential ID
+ *         example: "507f1f77bcf86cd799439011"
  *     responses:
  *       200:
  *         description: Credential deleted successfully
@@ -1427,12 +1783,39 @@ module.exports = router;
  *                 message:
  *                   type: string
  *                   example: "Credential deleted successfully"
+ *             example:
+ *               success: true
+ *               message: "Credential deleted successfully"
+ *       400:
+ *         description: Credential is already deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Credential is already deleted"
  *       401:
  *         description: Unauthorized
  *       403:
  *         description: Access denied
  *       404:
  *         description: Credential not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Credential not found"
  *       500:
  *         description: Server error
  */
@@ -1442,7 +1825,7 @@ module.exports = router;
  * /api/admin/credentials/{id}/decrypt:
  *   get:
  *     summary: Get decrypted credential (Admin only)
- *     description: Retrieve credential with decrypted password (creates audit log entry)
+ *     description: Retrieve credential with decrypted password (creates audit log entry). Cannot decrypt soft-deleted credentials. Note - Returns FLAT structure with plain text username/password, NOT nested in credentialData.
  *     tags: [Admin - Credential Management]
  *     security:
  *       - bearerAuth: []
@@ -1453,9 +1836,10 @@ module.exports = router;
  *         schema:
  *           type: string
  *         description: Credential ID
+ *         example: "507f1f77bcf86cd799439011"
  *     responses:
  *       200:
- *         description: Decrypted credential details
+ *         description: Decrypted credential retrieved successfully
  *         content:
  *           application/json:
  *             schema:
@@ -1468,11 +1852,101 @@ module.exports = router;
  *                   type: object
  *                   properties:
  *                     credential:
- *                       $ref: '#/components/schemas/Credential'
+ *                       type: object
+ *                       description: Decrypted credential with FLAT structure (not nested)
+ *                       properties:
+ *                         _id:
+ *                           type: string
+ *                           example: "507f1f77bcf86cd799439011"
+ *                         rootInstance:
+ *                           type: object
+ *                           properties:
+ *                             _id:
+ *                               type: string
+ *                               example: "507f1f77bcf86cd799439022"
+ *                             serviceName:
+ *                               type: string
+ *                               example: "AWS Console"
+ *                         subInstance:
+ *                           type: object
+ *                           properties:
+ *                             _id:
+ *                               type: string
+ *                               example: "507f1f77bcf86cd799439033"
+ *                             name:
+ *                               type: string
+ *                               example: "Production"
+ *                         username:
+ *                           type: string
+ *                           description: PLAIN TEXT username (decrypted)
+ *                           example: "admin@company.com"
+ *                         password:
+ *                           type: string
+ *                           description: PLAIN TEXT password (decrypted)
+ *                           example: "SecureP@ssw0rd123"
+ *                         url:
+ *                           type: string
+ *                           example: "https://console.aws.amazon.com"
+ *                         notes:
+ *                           type: string
+ *                           example: "Production AWS admin account"
+ *                         sharedWith:
+ *                           type: array
+ *                           items:
+ *                             type: string
+ *                           example: []
+ *                         createdBy:
+ *                           type: object
+ *                           properties:
+ *                             _id:
+ *                               type: string
+ *                               example: "507f1f77bcf86cd799439001"
+ *                             name:
+ *                               type: string
+ *                               example: "John Doe"
+ *                             email:
+ *                               type: string
+ *                               example: "john@example.com"
+ *                         createdAt:
+ *                           type: string
+ *                           format: date-time
+ *                           example: "2024-01-15T10:30:00.000Z"
+ *             example:
+ *               success: true
+ *               data:
+ *                 credential:
+ *                   _id: "507f1f77bcf86cd799439011"
+ *                   rootInstance:
+ *                     _id: "507f1f77bcf86cd799439022"
+ *                     serviceName: "AWS Console"
+ *                   subInstance:
+ *                     _id: "507f1f77bcf86cd799439033"
+ *                     name: "Production"
+ *                   username: "admin@company.com"
+ *                   password: "SecureP@ssw0rd123"
+ *                   url: "https://console.aws.amazon.com"
+ *                   notes: "Production AWS admin account"
+ *                   sharedWith: []
+ *                   createdBy:
+ *                     _id: "507f1f77bcf86cd799439001"
+ *                     name: "John Doe"
+ *                     email: "john@example.com"
+ *                   createdAt: "2024-01-15T10:30:00.000Z"
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Access denied
+ *         description: Access denied - Cannot access deleted credential
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Cannot access deleted credential"
  *       404:
  *         description: Credential not found
  *       500:
@@ -1495,21 +1969,24 @@ module.exports = router;
  *         schema:
  *           type: string
  *         description: Credential ID
+ *         example: "507f1f77bcf86cd799439011"
  *       - in: query
  *         name: page
  *         schema:
  *           type: integer
  *           default: 1
  *         description: Page number
+ *         example: 1
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
  *           default: 5
  *         description: Number of logs per page
+ *         example: 5
  *     responses:
  *       200:
- *         description: Credential audit logs
+ *         description: Credential audit logs retrieved successfully
  *         content:
  *           application/json:
  *             schema:
@@ -1520,10 +1997,12 @@ module.exports = router;
  *                   example: true
  *                 count:
  *                   type: integer
- *                   example: 2
+ *                   example: 3
+ *                   description: Number of logs in current page
  *                 total:
  *                   type: integer
- *                   example: 10
+ *                   example: 15
+ *                   description: Total number of audit logs
  *                 page:
  *                   type: integer
  *                   example: 1
@@ -1532,7 +2011,7 @@ module.exports = router;
  *                   example: 5
  *                 totalPages:
  *                   type: integer
- *                   example: 2
+ *                   example: 3
  *                 data:
  *                   type: object
  *                   properties:
@@ -1540,6 +2019,54 @@ module.exports = router;
  *                       type: array
  *                       items:
  *                         $ref: '#/components/schemas/AuditLog'
+ *             example:
+ *               success: true
+ *               count: 3
+ *               total: 15
+ *               page: 1
+ *               limit: 5
+ *               totalPages: 3
+ *               data:
+ *                 auditLogs:
+ *                   - _id: "507f1f77bcf86cd799439044"
+ *                     user:
+ *                       _id: "507f1f77bcf86cd799439001"
+ *                       name: "John Doe"
+ *                       email: "john@example.com"
+ *                     credential: "507f1f77bcf86cd799439011"
+ *                     credentialOwner: "507f1f77bcf86cd799439001"
+ *                     serviceName: "AWS Console"
+ *                     subInstanceName: "Production"
+ *                     action: "decrypt"
+ *                     ipAddress: "192.168.1.100"
+ *                     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+ *                     timestamp: "2024-01-15T10:30:00.000Z"
+ *                   - _id: "507f1f77bcf86cd799439045"
+ *                     user:
+ *                       _id: "507f1f77bcf86cd799439002"
+ *                       name: "Jane Smith"
+ *                       email: "jane@example.com"
+ *                     credential: "507f1f77bcf86cd799439011"
+ *                     credentialOwner: "507f1f77bcf86cd799439001"
+ *                     serviceName: "AWS Console"
+ *                     subInstanceName: "Production"
+ *                     action: "view"
+ *                     ipAddress: "192.168.1.101"
+ *                     userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+ *                     timestamp: "2024-01-15T09:15:00.000Z"
+ *                   - _id: "507f1f77bcf86cd799439046"
+ *                     user:
+ *                       _id: "507f1f77bcf86cd799439001"
+ *                       name: "John Doe"
+ *                       email: "john@example.com"
+ *                     credential: "507f1f77bcf86cd799439011"
+ *                     credentialOwner: "507f1f77bcf86cd799439001"
+ *                     serviceName: "AWS Console"
+ *                     subInstanceName: "Production"
+ *                     action: "update"
+ *                     ipAddress: "192.168.1.100"
+ *                     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+ *                     timestamp: "2024-01-14T16:45:00.000Z"
  *       401:
  *         description: Unauthorized
  *       403:
@@ -1566,30 +2093,35 @@ module.exports = router;
  *           type: integer
  *           default: 1
  *         description: Page number
+ *         example: 1
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
  *           default: 20
  *         description: Number of logs per page
+ *         example: 20
  *       - in: query
  *         name: userId
  *         schema:
  *           type: string
- *         description: Filter by user ID
+ *         description: Filter by user ID who performed the action
+ *         example: "507f1f77bcf86cd799439001"
  *       - in: query
  *         name: credentialId
  *         schema:
  *           type: string
  *         description: Filter by credential ID
+ *         example: "507f1f77bcf86cd799439011"
  *       - in: query
  *         name: credentialOwner
  *         schema:
  *           type: string
  *         description: Filter by credential owner ID
+ *         example: "507f1f77bcf86cd799439001"
  *     responses:
  *       200:
- *         description: All audit logs
+ *         description: All audit logs retrieved successfully
  *         content:
  *           application/json:
  *             schema:
@@ -1624,6 +2156,226 @@ module.exports = router;
  *         description: Unauthorized
  *       403:
  *         description: Access denied
+ *       500:
+ *         description: Server error
+ */
+
+/**
+ * @swagger
+ * /api/admin/credentials/{id}/share:
+ *   post:
+ *     summary: Share credential with another user (Admin)
+ *     description: Admin can share any credential with another user. Shared users can view and decrypt but cannot modify or delete. Cannot share soft-deleted credentials.
+ *     tags: [Admin - Credential Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Credential ID to share
+ *         example: "507f1f77bcf86cd799439011"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: ID of the user to share with
+ *                 example: "507f1f77bcf86cd799439002"
+ *           example:
+ *             userId: "507f1f77bcf86cd799439002"
+ *     responses:
+ *       200:
+ *         description: Credential shared successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     credential:
+ *                       type: object
+ *                       properties:
+ *                         _id:
+ *                           type: string
+ *                           example: "507f1f77bcf86cd799439011"
+ *                         sharedWith:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               _id:
+ *                                 type: string
+ *                               name:
+ *                                 type: string
+ *                               email:
+ *                                 type: string
+ *                 message:
+ *                   type: string
+ *                   example: "Credential shared successfully"
+ *             example:
+ *               success: true
+ *               data:
+ *                 credential:
+ *                   _id: "507f1f77bcf86cd799439011"
+ *                   sharedWith:
+ *                     - _id: "507f1f77bcf86cd799439002"
+ *                       name: "Jane Smith"
+ *                       email: "jane@example.com"
+ *               message: "Credential shared successfully"
+ *       400:
+ *         description: Cannot share with yourself or validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Cannot share with yourself"
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Access denied or cannot share deleted credential
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Cannot share deleted credential"
+ *       404:
+ *         description: Credential or user not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *             examples:
+ *               credentialNotFound:
+ *                 value:
+ *                   success: false
+ *                   message: "Credential not found"
+ *               userNotFound:
+ *                 value:
+ *                   success: false
+ *                   message: "User not found"
+ *       409:
+ *         description: Already shared with this user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Already shared with this user"
+ *       500:
+ *         description: Server error
+ */
+
+/**
+ * @swagger
+ * /api/admin/credentials/{id}/revoke:
+ *   post:
+ *     summary: Revoke shared credential access (Admin)
+ *     description: Admin can revoke a user's access to any shared credential. Note - This uses POST method with userId in request body.
+ *     tags: [Admin - Credential Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Credential ID
+ *         example: "507f1f77bcf86cd799439011"
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: User ID to revoke access from
+ *                 example: "507f1f77bcf86cd799439002"
+ *           example:
+ *             userId: "507f1f77bcf86cd799439002"
+ *     responses:
+ *       200:
+ *         description: Access revoked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Access revoked successfully"
+ *             example:
+ *               success: true
+ *               message: "Access revoked successfully"
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Credential not found or not shared with this user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *             examples:
+ *               credentialNotFound:
+ *                 value:
+ *                   success: false
+ *                   message: "Credential not found"
+ *               notShared:
+ *                 value:
+ *                   success: false
+ *                   message: "Not shared with this user"
  *       500:
  *         description: Server error
  */
@@ -1671,37 +2423,53 @@ module.exports = router;
  *
  *     Credential:
  *       type: object
+ *       description: Credential object with encrypted/faded username and nested credentialData
  *       properties:
  *         _id:
  *           type: string
- *           example: "cred_id_123"
+ *           example: "507f1f77bcf86cd799439011"
  *         rootInstance:
  *           type: object
  *           properties:
  *             _id:
  *               type: string
- *               example: "root_id_123"
+ *               example: "507f1f77bcf86cd799439022"
  *             serviceName:
  *               type: string
- *               example: "Google"
- *             type:
- *               type: string
- *               example: "email"
+ *               example: "AWS Console"
  *         subInstance:
  *           type: object
  *           properties:
  *             _id:
  *               type: string
- *               example: "sub_id_123"
+ *               example: "507f1f77bcf86cd799439033"
  *             name:
  *               type: string
- *               example: "Main Account"
+ *               example: "Production"
+ *         credentialData:
+ *           type: object
+ *           description: Nested credential data with faded username
+ *           properties:
+ *             username:
+ *               type: string
+ *               description: Faded username (e.g., a****@example.com)
+ *               example: "a****n@company.com"
+ *             password:
+ *               type: string
+ *               description: Encrypted password string
+ *               example: "a1b2c3d4e5f6:1234567890abcdef"
+ *             url:
+ *               type: string
+ *               example: "https://console.aws.amazon.com"
+ *             notes:
+ *               type: string
+ *               example: "Production AWS admin account"
  *         createdBy:
  *           type: object
  *           properties:
  *             _id:
  *               type: string
- *               example: "user_id_123"
+ *               example: "507f1f77bcf86cd799439001"
  *             name:
  *               type: string
  *               example: "John Doe"
@@ -1715,42 +2483,24 @@ module.exports = router;
  *             properties:
  *               _id:
  *                 type: string
- *                 example: "user_id_456"
+ *                 example: "507f1f77bcf86cd799439002"
  *               name:
  *                 type: string
  *                 example: "Jane Smith"
  *               email:
  *                 type: string
  *                 example: "jane@example.com"
- *         username:
- *           type: string
- *           example: "user@example.com"
- *         password:
- *           type: string
- *           example: "encrypted_password"
- *         url:
- *           type: string
- *           example: "https://google.com"
- *         notes:
- *           type: string
- *           example: "Main email account"
  *         createdAt:
  *           type: string
  *           format: date-time
- *           example: "2023-01-01T00:00:00.000Z"
- *         updatedAt:
- *           type: string
- *           format: date-time
- *           example: "2023-01-01T00:00:00.000Z"
+ *           example: "2024-01-15T10:30:00.000Z"
  *       required:
  *         - _id
  *         - rootInstance
  *         - subInstance
+ *         - credentialData
  *         - createdBy
- *         - username
- *         - password
  *         - createdAt
- *         - updatedAt
  *
  *     AuditLog:
  *       type: object

@@ -10,6 +10,9 @@ const subInstanceSchema = new mongoose.Schema({
   rootInstance: { type: mongoose.Schema.Types.ObjectId, ref: "RootInstance", required: true },
   credentials: [{ type: mongoose.Schema.Types.ObjectId, ref: "Credential" }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "C_User", required: true },
+  isDeleted: { type: Boolean, default: false },
+  deletedAt: { type: Date, default: null },
+  deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "C_User", default: null },
   createdAt: { type: Date, default: Date.now }
 }, { versionKey: false });
 subInstanceSchema.index({ name: 1});

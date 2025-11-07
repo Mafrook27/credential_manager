@@ -252,14 +252,50 @@ module.exports = router;
  *                         isVerified:
  *                           type: boolean
  *                           example: true
+ *                         isActive:
+ *                           type: boolean
+ *                           example: true
  *                         createdAt:
  *                           type: string
  *                           format: date-time
  *                           example: "2024-01-01T00:00:00.000Z"
+ *             example:
+ *               success: true
+ *               data:
+ *                 user:
+ *                   _id: "507f1f77bcf86cd799439011"
+ *                   name: "John Doe"
+ *                   email: "john.doe@example.com"
+ *                   role: "user"
+ *                   isVerified: true
+ *                   isActive: true
+ *                   createdAt: "2024-01-01T00:00:00.000Z"
  *       403:
  *         description: Access denied - Can only view own profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Access denied"
  *       404:
  *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "User not found"
  */
 
 /**
@@ -289,12 +325,15 @@ module.exports = router;
  *               name:
  *                 type: string
  *                 description: Updated name
- *                 example: "John Updated Doe"
+ *                 example: "John Updated"
  *               email:
  *                 type: string
  *                 format: email
  *                 description: Updated email address
  *                 example: "john.updated@example.com"
+ *           example:
+ *             name: "John Updated"
+ *             email: "john.updated@example.com"
  *     responses:
  *       200:
  *         description: Profile updated successfully
@@ -347,11 +386,38 @@ module.exports = router;
  *         required: true
  *         schema:
  *           type: string
+ *         description: User ID (must match authenticated user)
+ *         example: "507f1f77bcf86cd799439011"
  *     responses:
  *       200:
  *         description: User deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "User deleted successfully"
+ *             example:
+ *               success: true
+ *               message: "User deleted successfully"
  *       403:
- *         description: Access denied
+ *         description: Access denied - Can only delete own account
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Access denied"
  *       404:
  *         description: User not found
  */
@@ -361,7 +427,7 @@ module.exports = router;
  * /api/users/{id}/stats:
  *   get:
  *     summary: Get user statistics
- *     description: Retrieve user dashboard statistics including total credentials, shared credentials, and recent activity
+ *     description: Retrieve user dashboard statistics including total credentials, shared credentials, and recent activity. Users can only view their own stats.
  *     tags: [User Profile]
  *     security:
  *       - bearerAuth: []
@@ -371,11 +437,57 @@ module.exports = router;
  *         required: true
  *         schema:
  *           type: string
+ *         description: User ID (must match authenticated user)
+ *         example: "507f1f77bcf86cd799439011"
  *     responses:
  *       200:
  *         description: User stats retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     stats:
+ *                       type: object
+ *                       properties:
+ *                         totalCredentials:
+ *                           type: integer
+ *                           description: Number of credentials owned by user
+ *                           example: 15
+ *                         sharedWithMe:
+ *                           type: integer
+ *                           description: Number of credentials shared with user
+ *                           example: 5
+ *                         recentActivities:
+ *                           type: integer
+ *                           description: Number of activities in last 7 days
+ *                           example: 12
+ *             example:
+ *               success: true
+ *               data:
+ *                 stats:
+ *                   totalCredentials: 15
+ *                   sharedWithMe: 5
+ *                   recentActivities: 12
  *       403:
- *         description: Access denied
+ *         description: Access denied - Can only view own stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Access denied"
  *       404:
  *         description: User not found
  */
@@ -390,7 +502,7 @@ module.exports = router;
  * /api/users/credentials:
  *   get:
  *     summary: Get all my credentials (owned and shared)
- *     description: Retrieve all credentials owned by or shared with the authenticated user. Supports search and filtering.
+ *     description: Retrieve all active (non-deleted) credentials owned by or shared with the authenticated user. Excludes soft-deleted credentials and credentials in deleted subinstances. Supports search filtering.
  *     tags: [User Credentials]
  *     security:
  *       - bearerAuth: []
@@ -401,12 +513,6 @@ module.exports = router;
  *           type: string
  *         description: Search by service name or sub-instance name
  *         example: "Google"
- *       - in: query
- *         name: type
- *         schema:
- *           type: string
- *         description: Filter by credential type
- *         example: "email"
  *       - in: query
  *         name: page
  *         schema:
@@ -489,7 +595,7 @@ module.exports = router;
  * /api/users/credentials:
  *   post:
  *     summary: Create a new credential
- *     description: Create a new credential entry. Requires rootId and subId as query parameters. Password will be encrypted before storage. Only one credential per sub-instance is allowed per user.
+ *     description: Create a new credential entry. Requires rootId and subId as query parameters. Password will be encrypted before storage. Only one credential per sub-instance is allowed per user. Cannot create credentials in soft-deleted subinstances.
  *     tags: [User Credentials]
  *     security:
  *       - bearerAuth: []
@@ -506,7 +612,7 @@ module.exports = router;
  *         required: true
  *         schema:
  *           type: string
- *         description: Sub-instance ID (folder)
+ *         description: Sub-instance ID (subinstance)
  *         example: "507f1f77bcf86cd799439022"
  *     requestBody:
  *       required: true
@@ -578,7 +684,7 @@ module.exports = router;
  * /api/users/credentials/{id}:
  *   get:
  *     summary: Get credential details (encrypted)
- *     description: Retrieve details of a specific credential. Password will be encrypted. Use /decrypt endpoint to view password.
+ *     description: Retrieve details of a specific credential. Password will be encrypted. Use /decrypt endpoint to view password. Cannot access soft-deleted credentials or credentials in deleted subinstances.
  *     tags: [User Credentials]
  *     security:
  *       - bearerAuth: []
@@ -646,7 +752,7 @@ module.exports = router;
  * /api/users/credentials/{credId}:
  *   put:
  *     summary: Update my credential
- *     description: Update a credential you own. Only username, password, url, and notes can be updated. Service name and sub-instance cannot be changed. Only the owner can update credentials.
+ *     description: Update a credential you own. Only username, password, url, and notes can be updated. Service name and sub-instance cannot be changed. Only the owner can update credentials. Cannot update soft-deleted credentials or credentials in deleted subinstances.
  *     tags: [User Credentials]
  *     security:
  *       - bearerAuth: []
@@ -706,7 +812,7 @@ module.exports = router;
  * /api/users/credentials/{id}:
  *   delete:
  *     summary: Delete my credential
- *     description: Permanently delete a credential you own. Only the owner can delete credentials.
+ *     description: Soft delete a credential you own. The credential is marked as deleted but not permanently removed from the database. Only the owner can delete credentials. Creates an audit log entry.
  *     tags: [User Credentials]
  *     security:
  *       - bearerAuth: []
@@ -732,6 +838,8 @@ module.exports = router;
  *                 message:
  *                   type: string
  *                   example: "Credential deleted successfully"
+ *       400:
+ *         description: Credential is already deleted
  *       403:
  *         description: Access denied - Only owner can delete
  *       404:
@@ -743,7 +851,7 @@ module.exports = router;
  * /api/users/credentials/{id}/decrypt:
  *   get:
  *     summary: Get decrypted credential
- *     description: Retrieve credential with decrypted password. This action is logged in audit logs for security.
+ *     description: Retrieve credential with decrypted password. This action is logged in audit logs for security. Cannot decrypt soft-deleted credentials.
  *     tags: [User Credentials]
  *     security:
  *       - bearerAuth: []
@@ -865,7 +973,7 @@ module.exports = router;
  * /api/users/credentials/{id}/share:
  *   post:
  *     summary: Share credential with another user
- *     description: Share a credential with another user. Only the owner can share credentials. Shared users can view and decrypt but cannot modify or delete.
+ *     description: Share a credential with another user. Only the owner (or admin) can share credentials. Shared users can view and decrypt but cannot modify or delete. Cannot share soft-deleted credentials.
  *     tags: [User Credentials]
  *     security:
  *       - bearerAuth: []
@@ -919,7 +1027,7 @@ module.exports = router;
  * /api/users/credentials/{id}/share/{userId}:
  *   delete:
  *     summary: Revoke shared access
- *     description: Remove a user's access to your shared credential. Only the owner can revoke access.
+ *     description: Remove a user's access to your shared credential. Only the owner (or admin) can revoke access.
  *     tags: [User Credentials]
  *     security:
  *       - bearerAuth: []

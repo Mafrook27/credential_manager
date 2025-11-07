@@ -1,17 +1,6 @@
 const Joi = require('joi');
 
-const typeOptions = [
-  'banking',
-  'email',
-  'cloud',
-  'social',
-  'development',
-  'database',
-  'payment',
-  'hosting',
-  'communication',
-  'other'
-];
+
 
 // Validation schema for creating RootInstance
 const createInstanceSchema = Joi.object({
@@ -29,14 +18,7 @@ const createInstanceSchema = Joi.object({
       'any.required': 'Service name is required'
     }),
   
-  type: Joi.string()
-    .valid(...typeOptions)
-    .default('other')
-    .example('cloud')
-    .description('Type of service: banking, email, cloud, social, development, database, payment, hosting, communication, other')
-    .messages({
-      'any.only': 'Invalid service type. Valid types: banking, email, cloud, social, development, database, payment, hosting, communication, other'
-    })
+ 
 });
 
 // Validation schema for updating RootInstance
@@ -53,17 +35,8 @@ const updateInstanceSchema = Joi.object({
       'string.max': 'Service name cannot exceed 100 characters'
     }),
   
-  type: Joi.string()
-    .valid(...typeOptions)
-    .optional()
-    .example('cloud')
-    .messages({
-      'any.only': 'Invalid service type. Valid types: banking, email, cloud, social, development, database, payment, hosting, communication, other'
-    })
-}).min(1).messages({
-  'object.min': 'At least one field (serviceName or type) must be provided for update'
+ 
 });
-
 
 //--------------------- creating SubInstance
 const createSubInstanceSchema = Joi.object({
@@ -73,7 +46,7 @@ const createSubInstanceSchema = Joi.object({
     .max(100)
     .required()
     .example('Production Account')
-    .description('Name of the sub-instance/folder (e.g., login, transaction, personal, work)')
+    .description('Name of the sub-instance/subinstance (e.g., login, transaction, personal, work)')
     .messages({
       'string.empty': 'Sub-instance name is required',
       'string.min': 'Sub-instance name must be at least 1 character',
@@ -90,7 +63,7 @@ const updateSubInstanceSchema = Joi.object({
     .max(100)
     .required()
     .example('Development Environment')
-    .description('Updated name of the sub-instance/folder')
+    .description('Updated name of the sub-instance/subinstance')
     .messages({
       'string.empty': 'Sub-instance name is required',
       'string.min': 'Sub-instance name must be at least 1 character',

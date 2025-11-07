@@ -13,11 +13,11 @@ const instanceController = {
   createInstance: async (req, res, next) => {
     try {
       const userId = req.payload.id;
-      const { serviceName, type } = req.body;
+      const { serviceName } = req.body;
 
       const existingInstance = await RootInstance.findOne({
-        serviceName: { $regex: `^${serviceName.trim()}$`, $options: 'i' },
-        type: type || 'other'
+        serviceName: { $regex: `^${serviceName.trim()}$`, $options: 'i' }
+       
       });
 
       if (existingInstance) {
@@ -26,7 +26,6 @@ const instanceController = {
           data: {
             id: existingInstance._id,
             serviceName: existingInstance.serviceName,
-            type: existingInstance.type,
             subInstancesCount: existingInstance.subInstances.length,
             createdAt: existingInstance.createdAt,
             isNew: false
@@ -37,7 +36,6 @@ const instanceController = {
 
       const rootInstance = await RootInstance.create({
         serviceName: serviceName.trim(),
-        type: type || 'other',
         createdBy: userId,
         subInstances: []
       });
@@ -47,7 +45,6 @@ const instanceController = {
         data: {
           id: rootInstance._id,
           serviceName: rootInstance.serviceName,
-          type: rootInstance.type,
           subInstancesCount: 0,
           createdAt: rootInstance.createdAt,
           isNew: true
@@ -66,177 +63,173 @@ const instanceController = {
   // GET /api/instances?rootName=<serviceName>
   // GET /api/instances?search=<searchTerm>
   listInstances: async (req, res, next) => {
-  try {
-    const { rootId, rootName, search } = req.query;
+    try {
+      const { rootId, rootName, search } = req.query;
 
-    // ===== CASE 1: Get by ID =====
-    if (rootId) {
-      if (!mongoose.Types.ObjectId.isValid(rootId)) {
-        const error = new Error('Invalid root instance ID format');
-        error.statusCode = 400;
-        throw error;
-      }
-
-      const instance = await RootInstance.findById(rootId)
-        .populate({
-          path: 'subInstances',
-          select: 'name createdAt'
-        })
-        .select('serviceName type subInstances createdAt')
-        .lean();
-
-      if (!instance) {
-        const error = new Error('Root instance not found');
-        error.statusCode = 404;
-        throw error;
-      }
-
-      return res.json({
-        success: true,
-        data: {
-          rootInstanceId: instance._id,
-          serviceName: instance.serviceName,
-          type: instance.type,
-          subInstances: instance.subInstances.map(sub => ({
-            subInstanceId: sub._id,
-            name: sub.name,
-            createdAt: sub.createdAt
-          })),
-          createdAt: instance.createdAt
+      // ===== CASE 1: Get by ID =====
+      if (rootId) {
+        if (!mongoose.Types.ObjectId.isValid(rootId)) {
+          const error = new Error('Invalid root instance ID format');
+          error.statusCode = 400;
+          throw error;
         }
-      });
-    }
 
+        const instance = await RootInstance.findById(rootId)
+          .populate({
+            path: 'subInstances',
+            select: 'name createdAt isDeleted',
+            match: { isDeleted: false }
+          })
+          .select('serviceName subInstances createdAt')
+          .lean();
 
-    if (rootName) {
-      const instances = await RootInstance.find({
-        serviceName: { $regex: rootName.trim(), $options: 'i' }
-      })
-        .populate({
-          path: 'subInstances',
-          select: 'name createdAt'
+        if (!instance) {
+          const error = new Error('Root instance not found');
+          error.statusCode = 404;
+          throw error;
+        }
+
+        return res.json({
+          success: true,
+          data: {
+            rootInstanceId: instance._id,
+            serviceName: instance.serviceName,
+            subInstances: instance.subInstances.map(sub => ({
+              subInstanceId: sub._id,
+              name: sub.name,
+              createdAt: sub.createdAt
+            })),
+            createdAt: instance.createdAt
+          }
+        });
+      }
+
+      if (rootName) {
+        const instances = await RootInstance.find({
+          serviceName: { $regex: rootName.trim(), $options: 'i' }
         })
-        .select('serviceName type subInstances createdAt')
+          .populate({
+            path: 'subInstances',
+            select: 'name createdAt'
+          })
+          .select('serviceName subInstances createdAt')
+          .sort({ serviceName: 1 })
+          .lean();
+
+        const formattedInstances = instances.map(instance => {
+          // ✨ FILTER: Remove soft-deleted subinstances
+          const activeSubInstances = instance.subInstances.filter(sub => !sub.isDeleted);
+          
+          return {
+            rootInstanceId: instance._id,
+            serviceName: instance.serviceName,
+            subInstances: activeSubInstances.map(sub => ({
+              subInstanceId: sub._id,
+              name: sub.name,
+              createdAt: sub.createdAt
+            })),
+            createdAt: instance.createdAt
+          };
+        });
+
+        return res.json({
+          success: true,
+          data: formattedInstances,
+          count: formattedInstances.length
+        });
+      }
+
+      if (search) {
+        const searchTerm = search.trim();
+
+        // Search root instances
+        const matchingRoots = await RootInstance.find({
+          serviceName: { $regex: searchTerm, $options: 'i' }
+        })
+          .select('serviceName createdAt')
+          .sort({ serviceName: 1 })
+          .lean();
+
+        // Search sub-instances
+        const matchingSubs = await SubInstance.find({
+          name: { $regex: searchTerm, $options: 'i' },
+          isDeleted: false  // ✨ ADDED: exclude soft-deleted
+        })
+          .populate('rootInstance', 'serviceName')
+          .select('name rootInstance createdAt')
+          .sort({ name: 1 })
+          .lean();
+
+        const results = [];
+
+        matchingRoots.forEach(root => {
+          results.push({
+            type: 'root',
+            rootInstanceId: root._id,
+            serviceName: root.serviceName,
+            createdAt: root.createdAt
+          });
+        });
+
+        matchingSubs.forEach(sub => {
+          results.push({
+            type: 'sub',
+            subInstanceId: sub._id,
+            subInstanceName: sub.name,
+            rootInstanceId: sub.rootInstance._id,
+            rootInstanceName: sub.rootInstance.serviceName,
+            createdAt: sub.createdAt
+          });
+        });
+
+        return res.json({
+          success: true,
+          data: results,
+          count: results.length
+        });
+      }
+
+      const instances = await RootInstance.find({})
+        .select('serviceName createdAt')
         .sort({ serviceName: 1 })
         .lean();
 
       const formattedInstances = instances.map(instance => ({
         rootInstanceId: instance._id,
         serviceName: instance.serviceName,
-        type: instance.type,
-        subInstances: instance.subInstances.map(sub => ({
-          subInstanceId: sub._id,
-          name: sub.name,
-          createdAt: sub.createdAt
-        })),
         createdAt: instance.createdAt
       }));
 
-      return res.json({
+      res.json({
         success: true,
         data: formattedInstances,
         count: formattedInstances.length
       });
+
+    } catch (error) {
+      logger.error('listInstances error', { message: error.message, stack: error.stack });
+      next(error);
     }
-
-    
-    if (search) {
-      const searchTerm = search.trim();
-
-      // Search root instances
-      const matchingRoots = await RootInstance.find({
-        serviceName: { $regex: searchTerm, $options: 'i' }
-      })
-        .select('serviceName type createdAt')
-        .sort({ serviceName: 1 })
-        .lean();
-
-      // Search sub-instances
-      const matchingSubs = await SubInstance.find({
-        name: { $regex: searchTerm, $options: 'i' }
-      })
-        .populate('rootInstance', 'serviceName type')
-        .select('name rootInstance createdAt')
-        .sort({ name: 1 })
-        .lean();
-
-     
-      const results = [];
-
-      
-      matchingRoots.forEach(root => {
-        results.push({
-          type: 'root',
-          rootInstanceId: root._id,
-          serviceName: root.serviceName,
-          rootType: root.type,
-          createdAt: root.createdAt
-        });
-      });
-
-    
-      matchingSubs.forEach(sub => {
-        results.push({
-          type: 'sub',
-          subInstanceId: sub._id,
-          subInstanceName: sub.name,
-          rootInstanceId: sub.rootInstance._id,
-          rootInstanceName: sub.rootInstance.serviceName,
-          rootType: sub.rootInstance.type,
-          createdAt: sub.createdAt
-        });
-      });
-
-      return res.json({
-        success: true,
-        data: results,
-        count: results.length
-      });
-    }
-
-
-    const instances = await RootInstance.find({})
-      .select('serviceName type createdAt')
-      .sort({ serviceName: 1 })
-      .lean();
-
-    const formattedInstances = instances.map(instance => ({
-      rootInstanceId: instance._id,
-      serviceName: instance.serviceName,
-      type: instance.type,
-      createdAt: instance.createdAt
-    }));
-
-    res.json({
-      success: true,
-      data: formattedInstances,
-      count: formattedInstances.length
-    });
-
-  } catch (error) {
-    logger.error('listInstances error', { message: error.message, stack: error.stack });
-    next(error);
-  }
-},
+  },
 
   // PUT /api/instances/:instanceId
   updateInstance: async (req, res, next) => {
     try {
       const userId = req.payload.id;
       const { instanceId } = req.params;
-      const { serviceName, type } = req.body;
+      const { serviceName} = req.body;
 
+const user = await User.findById(userId).select('role');
+const isAdmin = user.role === 'admin'; 
       if (!mongoose.Types.ObjectId.isValid(instanceId)) {
         const error = new Error('Invalid instance ID format');
         error.statusCode = 400;
         throw error;
       }
 
-      const user = await User.findById(userId).select('role');
-      
-      if (!user) {
-        const error = new Error('User not found');
-        error.statusCode = 404;
+      if (!isAdmin) {
+        const error = new Error('You don\'t have permission to edit services');
+        error.statusCode = 403;
         throw error;
       }
 
@@ -248,44 +241,21 @@ const instanceController = {
         throw error;
       }
 
-        //find total count 
-      const usersUsingThis = await Credential.distinct('createdBy', {
-        rootInstance: instanceId
-      });
-      console.log(usersUsingThis);
-
-      const otherUsersCount = usersUsingThis.filter(
-        id => id.toString() !== userId
-      ).length;
-console.log(otherUsersCount);
-console.log(user.role);
-
-      if (user.role !== 'admin' && otherUsersCount > 0) {
-        const error = new Error(
-          `Cannot update: ${otherUsersCount} other user(s) are using this service. ` +
-          `Changes would affect their other user credentials.`
-        );
-        error.statusCode = 403;
-        throw error;
-      }
-
-  
       if (serviceName && serviceName !== instance.serviceName) {
         const duplicate = await RootInstance.findOne({
           serviceName: { $regex: `^${serviceName.trim()}$`, $options: 'i' },
-          type: type || instance.type,
           _id: { $ne: instanceId }
         });
 
         if (duplicate) {
-          const error = new Error('A service with this name and type already exists in list');
+          const error = new Error('A service with this name already exists in list');
           error.statusCode = 400;
           throw error;
         }
       }
 
       if (serviceName) instance.serviceName = serviceName.trim();
-      if (type) instance.type = type;
+      // ✨ REMOVED: type assignment
 
       await instance.save();
 
@@ -294,7 +264,6 @@ console.log(user.role);
         data: {
           id: instance._id,
           serviceName: instance.serviceName,
-          type: instance.type,
           createdAt: instance.createdAt
         },
         message: 'Service updated successfully'
@@ -312,20 +281,24 @@ console.log(user.role);
       const userId = req.payload.id;
       const { instanceId } = req.params;
 
+const user= await User.findById(userId).select('role');
+const isAdmin = user.role === 'admin';
+console.info("seeeeeeeee",isAdmin);
       if (!mongoose.Types.ObjectId.isValid(instanceId)) {
         const error = new Error('Invalid instance ID format');
         error.statusCode = 400;
         throw error;
       }
 
-      const user = await User.findById(userId).select('role');
-      if (!user) {
-        const error = new Error('User not found');
-        error.statusCode = 404;
+      // ✨ NEW: Regular users CANNOT delete
+      if (!isAdmin) {
+        const error = new Error('You don\'t have permission to delete services');
+        error.statusCode = 403;
         throw error;
       }
 
-      const instance = await RootInstance.findById(instanceId);
+      const instance = await RootInstance.findById(instanceId)
+        .populate('subInstances');
 
       if (!instance) {
         const error = new Error('Root instance not found');
@@ -333,22 +306,14 @@ console.log(user.role);
         throw error;
       }
 
-   
-      const usersUsingThis = await Credential.distinct('createdBy', {
-        rootInstance: instanceId
-      });
+      // ✨ NEW: Check for active sub-instances
+      const activeSubInstances = instance.subInstances.filter(sub => !sub.isDeleted);
 
-      const otherUsersCount = usersUsingThis.filter(
-        id => id.toString() !== userId
-      ).length;
-
-      // Block if others using it (unless admin)
-      if (user.role !== 'admin' && otherUsersCount > 0) {
+      if (activeSubInstances.length > 0) {
         const error = new Error(
-          `Cannot delete: ${otherUsersCount} other user(s) have credentials in this service. ` +
-          `Only admin can delete services in use by others.`
+          `Cannot delete service with ${activeSubInstances.length} active subinstance(s). Delete subinstance first.`
         );
-        error.statusCode = 403;
+        error.statusCode = 400;
         throw error;
       }
 
@@ -434,7 +399,8 @@ console.log(user.role);
 
       const existingSubInstance = await SubInstance.findOne({
         name: { $regex: `^${name.trim()}$`, $options: 'i' },
-        rootInstance: instanceId
+        rootInstance: instanceId,
+        isDeleted: false  // ✨ Only check active subinstances
       });
 
       if (existingSubInstance) {
@@ -456,7 +422,8 @@ console.log(user.role);
         name: name.trim(),
         rootInstance: instanceId,
         createdBy: userId,
-        credentials: []
+        credentials: [],
+        isDeleted: false 
       });
 
       await RootInstance.findByIdAndUpdate(instanceId, {
@@ -473,7 +440,7 @@ console.log(user.role);
           createdAt: subInstance.createdAt,
           isNew: true
         },
-        message: 'Folder added to list successfully'
+        message: 'subinstance added to list successfully'
       });
 
     } catch (error) {
@@ -494,7 +461,7 @@ console.log(user.role);
       }
 
       const rootInstance = await RootInstance.findById(instanceId)
-        .select('serviceName type createdBy')
+        .select('serviceName createdBy')
         .populate('createdBy', 'name email')
         .lean();
 
@@ -504,7 +471,11 @@ console.log(user.role);
         throw error;
       }
 
-      const subInstances = await SubInstance.find({ rootInstance: instanceId })
+      // ✨ UPDATED: Filter out soft-deleted subinstances
+      const subInstances = await SubInstance.find({ 
+        rootInstance: instanceId,
+        isDeleted: false  // ✨ Only get active subinstances
+      })
         .populate('createdBy', 'name email')
         .sort({ name: 1 })
         .lean();
@@ -526,7 +497,6 @@ console.log(user.role);
         rootInstance: {
           id: rootInstance._id,
           serviceName: rootInstance.serviceName,
-          type: rootInstance.type,
           createdBy: {
             id: rootInstance.createdBy._id,
             name: rootInstance.createdBy.name,
@@ -549,6 +519,9 @@ console.log(user.role);
       const userId = req.payload.id;
       const { instanceId, subId } = req.params;
       const { name } = req.body;
+      
+      const user = await User.findById(userId).select('role');
+    const isAdmin = user.role === 'admin'; 
 
       if (!mongoose.Types.ObjectId.isValid(instanceId) || !mongoose.Types.ObjectId.isValid(subId)) {
         const error = new Error('Invalid instance or sub-instance ID format');
@@ -556,10 +529,10 @@ console.log(user.role);
         throw error;
       }
 
-      const user = await User.findById(userId).select('role');
-      if (!user) {
-        const error = new Error('User not found');
-        error.statusCode = 404;
+  
+      if (!isAdmin) {
+        const error = new Error('You don\'t have permission to edit subinstances');
+        error.statusCode = 403;
         throw error;
       }
 
@@ -582,7 +555,13 @@ console.log(user.role);
         throw error;
       }
 
- 
+   
+      if (subInstance.isDeleted) {
+        const error = new Error('Cannot update deleted subinstance');
+        error.statusCode = 400;
+        throw error;
+      }
+
       if (name && name.trim().toLowerCase() === rootInstance.serviceName.toLowerCase()) {
         const error = new Error(
           `Sub-instance name cannot be the same as service name "${rootInstance.serviceName}"`
@@ -591,26 +570,7 @@ console.log(user.role);
         throw error;
       }
 
-     
-      const usersUsingThis = await Credential.distinct('createdBy', {
-        subInstance: subId
-      });
-
-      const otherUsersCount = usersUsingThis.filter(
-        id => id.toString() !== userId
-      ).length;
-
-  
-      if (user.role !== 'admin' && otherUsersCount > 0) {
-        const error = new Error(
-          `Cannot update: ${otherUsersCount} other user(s) are using this subinstance. ` +
-          `Changes would affect their other user credentials.`
-        );
-        error.statusCode = 403;
-        throw error;
-      }
-
-      // Check for duplicates
+      // Check for duplicates (excluding soft-deleted)
       if (name && name !== subInstance.name) {
         const duplicate = await SubInstance.findOne({
           name: { $regex: `^${name.trim()}$`, $options: 'i' },
@@ -636,7 +596,7 @@ console.log(user.role);
           rootInstanceId: instanceId,
           createdAt: subInstance.createdAt
         },
-        message: 'Folder updated successfully'
+        message: 'Subinstance updated successfully'
       });
 
     } catch (error) {
@@ -650,17 +610,18 @@ console.log(user.role);
     try {
       const userId = req.payload.id;
       const { instanceId, subId } = req.params;
-
+      const user = await User.findById(userId).select('role');
+      const isAdmin = user.role === 'admin';
       if (!mongoose.Types.ObjectId.isValid(instanceId) || !mongoose.Types.ObjectId.isValid(subId)) {
         const error = new Error('Invalid instance or sub-instance ID format');
         error.statusCode = 400;
         throw error;
       }
 
-      const user = await User.findById(userId).select('role');
-      if (!user) {
-        const error = new Error('User not found');
-        error.statusCode = 404;
+      // ✨ NEW: Regular users CANNOT delete
+      if (!isAdmin) {
+        const error = new Error('You don\'t have permission to delete subinstance');
+        error.statusCode = 403;
         throw error;
       }
 
@@ -675,22 +636,10 @@ console.log(user.role);
         throw error;
       }
 
-      // Check if others are using this list item
-      const usersUsingThis = await Credential.distinct('createdBy', {
-        subInstance: subId
-      });
-
-      const otherUsersCount = usersUsingThis.filter(
-        id => id.toString() !== userId
-      ).length;
-
-      // Block if others using it (unless admin)
-      if (user.role !== 'admin' && otherUsersCount > 0) {
-        const error = new Error(
-          `Cannot delete: ${otherUsersCount} other user(s) have credentials in this subinstance. ` +
-          `Only admin can delete subinstances in use by others.`
-        );
-        error.statusCode = 403;
+      // ✨ NEW: Check if already soft-deleted
+      if (subInstance.isDeleted) {
+        const error = new Error('subinstance is already deleted');
+        error.statusCode = 400;
         throw error;
       }
 
@@ -700,35 +649,39 @@ console.log(user.role);
       try {
         const rootInstance = await RootInstance.findById(instanceId).session(session);
 
-        const credentials = await Credential.find({ subInstance: subId }).session(session);
+        // ✨ NEW: SOFT DELETE instead of hard delete
+        await SubInstance.findByIdAndUpdate(
+          subId,
+          {
+            isDeleted: true,
+            deletedAt: new Date(),
+            deletedBy: userId
+          },
+          { session }
+        );
 
-        const auditLogs = credentials.map(cred => ({
+        // ✨ Audit: Log soft delete (keep it minimal - no extra fields)
+        await Audit.create([{
           user: userId,
-          credential: cred._id,
-          credentialOwner: cred.createdBy,
+          credential: null,  // No specific credential
+          credentialOwner: userId,
           serviceName: rootInstance.serviceName,
-          action: 'delete',
+          subInstanceName: subInstance.name,
+          action: 'delete',  // Reuse credential delete action
           ipAddress: getClientIP(req).address,
           userAgent: req.get('User-Agent'),
           timestamp: new Date()
-        }));
-
-        if (auditLogs.length > 0) {
-          await Audit.insertMany(auditLogs, { session });
-        }
-
-        await Credential.deleteMany({ subInstance: subId }).session(session);
-        await RootInstance.findByIdAndUpdate(instanceId, { $pull: { subInstances: subId } }).session(session);
-        await SubInstance.findByIdAndDelete(subId).session(session);
+        }], { session });
 
         await session.commitTransaction();
 
         res.json({
           success: true,
-          message: 'Folder and all related credentials deleted successfully',
+          message: 'subinstance disabled successfully (soft delete triggered)',
           deleted: {
             subInstance: 1,
-            credentials: credentials.length
+            isDeleted: true,
+            frontendAction: 'Hide from UI, disable all operations'
           }
         });
 

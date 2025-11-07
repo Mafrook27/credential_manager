@@ -1,11 +1,11 @@
 const bcrypt = require("bcryptjs");
 const User = require("../Models/CRED_User");
 const logger= require("../util/Logger");
-
+const dotenv = require("dotenv");
 async function seedAdmin() {
   try {
-    const adminEmail ="admin@example.com";
-    const adminPassword = "Admin@123";
+    const adminEmail =process.env.ADMIN_ID||"admin@example.com";
+    const adminPassword =process.ADMIN_PASS||"Admin@123";
 
     const existingAdmin = await User.findOne({ email: adminEmail, role: "admin" });
     if (existingAdmin) {

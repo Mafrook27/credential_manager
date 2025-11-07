@@ -13,42 +13,36 @@ const userCredentialController = {
 // GET /api/users/credentials?search=<searchTerm>&type=<type>&page=<page>&limit=<limit>
 // user.credentialController.js
 
-getCredentials: async (req, res, next) => {
-  try {
-    const userId = req.payload.id;
-    const { search: rawSearch, type: rawType, page = 1, limit = 5 } = req.query;
+  getCredentials: async (req, res, next) => {
+    try {
+      const userId = req.payload.id;
+      const { search: rawSearch, page = 1, limit = 5 } = req.query;
 
-    const search = Array.isArray(rawSearch) ? rawSearch[0] : rawSearch?.trim();
-    const type = Array.isArray(rawType) ? rawType[0] : rawType?.trim();
+      const search = Array.isArray(rawSearch) ? rawSearch[0] : rawSearch?.trim();
+      // CHANGED: Removed type extraction
 
-    const currentUser = await User.findById(userId).lean();
-    if (!currentUser) throw Object.assign(new Error('User not found'), { statusCode: 404 });
+      const currentUser = await User.findById(userId).lean();
+      if (!currentUser) throw Object.assign(new Error('User not found'), { statusCode: 404 });
 
-    const baseAccessFilter = {
-      $or: [
-        { createdBy: userId },
-        { sharedWith: userId }
-      ]
-    };
+      const baseAccessFilter = {
+        $or: [
+          { createdBy: userId },
+          { sharedWith: userId }
+        ],
+        isDeleted: false  
+      };
 
-    const orFilters = [];
-    let rootQuery = {}; 
+      const orFilters = [];
+      let rootQuery = {};
+      // CHANGED: Removed type filter logic
 
-    if (search && type) {
-      rootQuery.$and = [
-        { serviceName: { $regex: search, $options: 'i' } },
-        { type }
-      ];
-    } else if (search) {
-      rootQuery.serviceName = { $regex: search, $options: 'i' };
-    } else if (type) {
-      rootQuery.type = type;
-    }
+      if (search) {
+        rootQuery.serviceName = { $regex: search, $options: 'i' };
+      }
 
-    const subQuery = search
-      ? { name: { $regex: search, $options: 'i' } }
-      : null;
-
+      const subQuery = search
+        ? { name: { $regex: search, $options: 'i' }, isDeleted: false }  
+        : { isDeleted: false }; 
     const [rootInstances, subInstances] = await Promise.all([
       RootInstance.find(rootQuery).select('_id'),
       subQuery ? SubInstance.find(subQuery).select('_id') : []
@@ -60,77 +54,82 @@ getCredentials: async (req, res, next) => {
     if (rootIds.length > 0) orFilters.push({ rootInstance: { $in: rootIds } });
     if (subIds.length > 0) orFilters.push({ subInstance: { $in: subIds } });
 
-    // ===== FINAL FILTER =====
-    const isSearchActive = search || type;
+      const isSearchActive = search; 
 
-    let finalFilter;
-    if (isSearchActive && orFilters.length === 0) {
-      finalFilter = { _id: null };
-    } else if (orFilters.length > 0) {
-      finalFilter = { $and: [baseAccessFilter, { $or: orFilters }] };
-    } else {
-      finalFilter = baseAccessFilter;
+      let finalFilter;
+      if (isSearchActive && orFilters.length === 0) {
+        finalFilter = { _id: null };
+      } else if (orFilters.length > 0) {
+        finalFilter = { $and: [baseAccessFilter, { $or: orFilters }] };
+      } else {
+        finalFilter = baseAccessFilter;
+      }
+
+      const parsedLimit = Math.max(parseInt(limit), 1);
+      const parsedPage = Math.max(parseInt(page), 1);
+      const skip = (parsedPage - 1) * parsedLimit;
+
+      const [credentials, total] = await Promise.all([
+        Credential.find(finalFilter)
+          .populate('rootInstance', 'serviceName') 
+          .populate({  
+            path: 'subInstance',
+            select: 'name isDeleted',
+            match: { isDeleted: false } 
+          })
+          .populate('createdBy', 'name email')
+          .populate('sharedWith', 'name email')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(parsedLimit)
+          .lean(),
+
+        Credential.countDocuments(finalFilter)
+      ]);
+
+      const activeCredentials = credentials.filter(cred => cred.subInstance !== null);  // ADDED: Filter soft-deleted
+
+      const displayCredentials = activeCredentials.map(cred => {
+        const isOwner = cred.createdBy._id.toString() === userId;
+
+        return {
+          ...getDisplayCredential(cred),
+          isOwner
+        };
+      });
+
+      res.json({
+        success: true,
+        count: activeCredentials.length,  // CHANGED: Use activeCredentials count
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+        totalPages: Math.ceil(total / parsedLimit),
+        data: { credentials: displayCredentials }
+      });
+
+    } catch (error) {
+      logger.error('getCredentials', { message: error.message, stack: error.stack });
+      next(error);
     }
-
-    const parsedLimit = Math.max(parseInt(limit), 1);
-    const parsedPage = Math.max(parseInt(page), 1);
-    const skip = (parsedPage - 1) * parsedLimit;
-
-    const [credentials, total] = await Promise.all([
-      Credential.find(finalFilter)
-        .populate('rootInstance', 'serviceName type')
-        .populate('subInstance', 'name')
-        .populate('createdBy', 'name email')
-        .populate('sharedWith', 'name email')    
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parsedLimit)
-        .lean(),
-
-      Credential.countDocuments(finalFilter)
-    ]);
-
-    // ========== ✅ ADD isOwner FLAG ==========
-    const displayCredentials = credentials.map(cred => {
-      const isOwner = cred.createdBy._id.toString() === userId;
-      
-      return {
-        ...getDisplayCredential(cred),
-        isOwner // ✅ ADD THIS FIELD
-      };
-    });
-
-    res.json({
-      success: true,
-      count: credentials.length,
-      total,
-      page: parsedPage,
-      limit: parsedLimit,
-      totalPages: Math.ceil(total / parsedLimit),
-      data: { credentials: displayCredentials }
-    });
-
-  } catch (error) {
-    logger.error('getCredentials', { message: error.message, stack: error.stack });
-    next(error);
-  }
-},
+  },
 
   // GET /api/users/credentials/:id
   getCredential: async (req, res, next) => {
     try {
       const credentialId = req.params.id;
       const userId = req.payload.id;
-      if (!userId ) {
-             throw new Error('User ID is required');
-            }
-             if (!credentialId ) {
-           throw new Error('Credential ID is required');
-            }
 
-         const credential = await Credential.findById(credentialId)
-        .populate('rootInstance', 'serviceName type')
-        .populate('subInstance', 'name')
+      if (!userId) {
+        throw new Error('User ID is required');
+      }
+      if (!credentialId) {
+        throw new Error('Credential ID is required');
+      }
+
+      const credential = await Credential.findById(credentialId)
+        .populate('rootInstance', 'serviceName') 
+        .populate('subInstance', 'name isDeleted') 
         .populate('createdBy', 'name email')
         .populate('sharedWith', 'name email');
 
@@ -140,7 +139,20 @@ getCredentials: async (req, res, next) => {
         throw error;
       }
 
-      // Check access - user can only access if owner or shared with
+      // ADDED: Check if credential is soft-deleted
+      if (credential.isDeleted) {
+        const error = new Error('Cannot access deleted credential');
+        error.statusCode = 403;
+        throw error;
+      }
+
+      // ADDED: Check if subinstance is soft-deleted
+      if (credential.subInstance && credential.subInstance.isDeleted) {
+        const error = new Error('Cannot access credential in deleted subinstance');
+        error.statusCode = 403;
+        throw error;
+      }
+
       const isOwner = credential.createdBy._id.toString() === userId;
       const isShared = credential.sharedWith.some(user => user._id.toString() === userId);
 
@@ -160,7 +172,8 @@ getCredentials: async (req, res, next) => {
           subInstanceName: credential.subInstance?.name || 'N/A',
           action: 'view',
           ipAddress: getClientIP(req).address,
-          userAgent: req.get('User-Agent')
+          userAgent: req.get('User-Agent'),
+          timestamp: new Date()  // ADDED: timestamp field
         });
       }
 
@@ -184,7 +197,20 @@ getCredentials: async (req, res, next) => {
     try {
       const userId = req.payload.id;
       const { rootId, subId } = req.query;
-      const { username, password, url, notes } = req.body; 
+      const { username, password, url, notes } = req.body;
+
+      // ADDED: Validation checks
+      if (!rootId || !subId) {
+        const error = new Error('rootId and subId are required');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (!username || !password) {
+        const error = new Error('username and password are required');
+        error.statusCode = 400;
+        throw error;
+      }
 
       const rootInstance = await RootInstance.findById(rootId);
       if (!rootInstance) {
@@ -204,15 +230,23 @@ getCredentials: async (req, res, next) => {
         throw error;
       }
 
-       const existingCredential = await Credential.findOne({
-      subInstance: subId,
-      createdBy: userId 
-    });
+
+      if (subInstance.isDeleted) {
+        const error = new Error('Cannot create credential in deleted subinstance');
+        error.statusCode = 403;
+        throw error;
+      }
+
+      const existingCredential = await Credential.findOne({
+        subInstance: subId,
+        createdBy: userId,
+        isDeleted: false  // ADDED: Filter active credentials only
+      });
 
     if (existingCredential) {
       const error = new Error(
         `You already have a credential in "${rootInstance.serviceName} → ${subInstance.name}". ` +
-        `Only one credential per subInstance folder is allowed. Please update your existing credential instead.`
+        `Only one credential per subinstance is allowed. Please update your existing credential instead.`
       );
       error.statusCode = 409;
       error.existingCredentialId = existingCredential._id;
@@ -234,7 +268,7 @@ getCredentials: async (req, res, next) => {
       });
 
       const populatedCredential = await Credential.findById(credential._id)
-        .populate('rootInstance', 'serviceName type')
+        .populate('rootInstance', 'serviceName')  // CHANGED: Removed type
         .populate('subInstance', 'name')
         .populate('createdBy', 'name email');
 
@@ -245,10 +279,11 @@ getCredentials: async (req, res, next) => {
         credential: credential._id,
         credentialOwner: userId,
         serviceName: rootInstance.serviceName,
-        subInstanceName: subInstance?.name || 'N/A',
+        subInstanceName: subInstance.name,
         action: 'create',
         ipAddress: getClientIP(req).address,
-        userAgent: req.get('User-Agent')
+        userAgent: req.get('User-Agent'),
+        timestamp: new Date()  // ADDED: timestamp field
       });
 
       res.status(201).json({
@@ -270,11 +305,11 @@ getCredentials: async (req, res, next) => {
     try {
       const userId = req.payload.id;
       const credId = req.params.credId;
-      const { username, password, url, notes } = req.body;  
+      const { username, password, url, notes } = req.body;
 
       const credential = await Credential.findById(credId)
-        .populate('rootInstance', 'serviceName type')
-        .populate('subInstance', 'name');
+        .populate('rootInstance', 'serviceName')  // CHANGED: Removed type
+        .populate('subInstance', 'name isDeleted');  // CHANGED: Added isDeleted
 
       if (!credential) {
         const error = new Error('Credential not found');
@@ -282,7 +317,20 @@ getCredentials: async (req, res, next) => {
         throw error;
       }
 
-  
+      // ADDED: Check if credential is soft-deleted
+      if (credential.isDeleted) {
+        const error = new Error('Cannot update deleted credential');
+        error.statusCode = 403;
+        throw error;
+      }
+
+      // ADDED: Check if subinstance is soft-deleted
+      if (credential.subInstance && credential.subInstance.isDeleted) {
+        const error = new Error('Cannot update credential in deleted subinstance');
+        error.statusCode = 403;
+        throw error;
+      }
+
       const isOwner = credential.createdBy.toString() === userId;
       if (!isOwner) {
         const error = new Error('Access denied');
@@ -306,11 +354,12 @@ getCredentials: async (req, res, next) => {
         subInstanceName: credential.subInstance?.name || 'N/A',
         action: 'update',
         ipAddress: getClientIP(req).address,
-        userAgent: req.get('User-Agent')
+        userAgent: req.get('User-Agent'),
+        timestamp: new Date()  // ADDED: timestamp field
       });
 
       const updatedCredential = await Credential.findById(credId)
-        .populate('rootInstance', 'serviceName type')
+        .populate('rootInstance', 'serviceName')  // CHANGED: Removed type
         .populate('subInstance', 'name')
         .populate('createdBy', 'name email')
         .populate('sharedWith', 'name email');
@@ -352,7 +401,7 @@ getCredentials: async (req, res, next) => {
       const userId = req.payload.id;
 
       const credential = await Credential.findById(credentialId)
-        .populate('rootInstance', 'serviceName type')
+        .populate('rootInstance', 'serviceName')  // CHANGED: Removed type
         .populate('subInstance', 'name');
 
       if (!credential) {
@@ -361,7 +410,13 @@ getCredentials: async (req, res, next) => {
         throw error;
       }
 
-      // Only owner can delete (admin logic removed)
+      // ADDED: Check if already soft-deleted
+      if (credential.isDeleted) {
+        const error = new Error('Credential is already deleted');
+        error.statusCode = 400;
+        throw error;
+      }
+
       const isOwner = credential.createdBy.toString() === userId;
       if (!isOwner) {
         const error = new Error('Access denied');
@@ -369,28 +424,13 @@ getCredentials: async (req, res, next) => {
         throw error;
       }
 
-      await SubInstance.findByIdAndUpdate(
-        credential.subInstance,
-        { $pull: { credentials: credentialId } }
-      );
-
-      await Credential.findByIdAndDelete(credentialId);
-
-      const subInstanceCreds = await Credential.countDocuments({ 
-        subInstance: credential.subInstance 
+      // CHANGED: Soft delete instead of hard delete
+      const now = new Date();
+      await Credential.findByIdAndUpdate(credentialId, {
+        isDeleted: true,
+        deletedAt: now,
+        deletedBy: userId
       });
-      
-      if (subInstanceCreds === 0) {
-        await SubInstance.findByIdAndDelete(credential.subInstance);
-        
-        const rootInstanceSubs = await SubInstance.countDocuments({ 
-          rootInstance: credential.rootInstance._id 
-        });
-        
-        if (rootInstanceSubs === 0) {
-          await RootInstance.findByIdAndDelete(credential.rootInstance._id);
-        }
-      }
 
       await Audit.create({
         user: userId,
@@ -399,8 +439,9 @@ getCredentials: async (req, res, next) => {
         serviceName: credential.rootInstance.serviceName,
         subInstanceName: credential.subInstance?.name || 'N/A',
         action: 'delete',
-        ipAddress:getClientIP(req).address,
-        userAgent: req.get('User-Agent')
+        ipAddress: getClientIP(req).address,
+        userAgent: req.get('User-Agent'),
+        timestamp: now 
       });
 
       res.json({
@@ -423,7 +464,7 @@ shareCredential: async (req, res, next) => {
     const userRole = req.user?.role; // From authorize middleware
 
     const credential = await Credential.findById(credentialId)
-      .populate('rootInstance', 'serviceName type')
+      .populate('rootInstance', 'serviceName')
       .populate('subInstance', 'name');
 
     if (!credential) {
@@ -432,6 +473,11 @@ shareCredential: async (req, res, next) => {
       throw error;
     }
 
+     if (credential.isDeleted) {
+        const error = new Error('Cannot share deleted credential');
+        error.statusCode = 403;
+        throw error;
+      }
     // Owner can share, or admin can share any credential
     const isOwner = credential.createdBy.toString() === userId;
     const isAdmin = userRole === 'admin';
@@ -462,34 +508,36 @@ shareCredential: async (req, res, next) => {
       throw error;
     }
 
-    credential.sharedWith.push(targetUserId);
-    await credential.save();
+      credential.sharedWith.push(targetUserId);
+      await credential.save();
 
-    await Audit.create({
-      user: userId,
-      credential: credentialId,
-      credentialOwner: credential.createdBy,
-      serviceName: credential.rootInstance.serviceName,
-      subInstanceName: credential.subInstance?.name || 'N/A',
-      action: 'share',
-      targetUser: targetUserId,
-      ipAddress: getClientIP(req).address,
-      userAgent: req.get('User-Agent')
-    });
+      await Audit.create({
+        user: userId,
+        credential: credentialId,
+        credentialOwner: credential.createdBy,
+        serviceName: credential.rootInstance.serviceName,
+        subInstanceName: credential.subInstance?.name || 'N/A',
+        action: 'share',
+        targetUser: targetUserId,
+        ipAddress: getClientIP(req).address,
+        userAgent: req.get('User-Agent'),
+        timestamp: new Date()  // ADDED: timestamp field
+      });
 
     const updatedCredential = await Credential.findById(credentialId)
       .populate('sharedWith', 'name email');
 
-    res.json({
-      success: true,
-      data: { credential: updatedCredential },
-      message: 'Credential shared successfully'
-    });
+      res.json({
+        success: true,
+        data: { credential: updatedCredential },
+        message: 'Credential shared successfully'
+      });
 
-  } catch (error) {
-    next(error);
-  }
-},
+    } catch (error) {
+      logger.error('shareCredential', { message: error.message, stack: error.stack });
+      next(error);
+    }
+  },
 
 
   // DELETE /api/users/credentials/:id/share/:userId
@@ -501,9 +549,9 @@ revokeAccess: async (req, res, next) => {
     const userId = req.payload.id;
     const userRole = req.user?.role; // From authorize middleware
 
-    const credential = await Credential.findById(credentialId)
-      .populate('rootInstance', 'serviceName type')
-      .populate('subInstance', 'name');
+      const credential = await Credential.findById(credentialId)
+        .populate('rootInstance', 'serviceName')  // CHANGED: Removed type
+        .populate('subInstance', 'name');
 
     if (!credential) {
       const error = new Error('Credential not found');
@@ -541,7 +589,8 @@ revokeAccess: async (req, res, next) => {
       action: 'revoke',
       targetUser: targetUserId,
       ipAddress: getClientIP(req).address,
-      userAgent: req.get('User-Agent')
+      userAgent: req.get('User-Agent'),
+      timestamp : new Date(),
     });
 
     res.json({
@@ -602,6 +651,7 @@ revokeAccess: async (req, res, next) => {
       });
 
     } catch (error) {
+      logger.info('getAuditLogs', { message: error.message, stack: error.stack });
       next(error);
     }
   },
@@ -619,6 +669,13 @@ revokeAccess: async (req, res, next) => {
         throw error;
       }
 
+  
+      if (credential.isDeleted) {
+        const error = new Error('Cannot access deleted credential');
+        error.statusCode = 403;
+        throw error;
+      }
+
       const isOwner = credential.createdBy.toString() === userId;
       const isSharedWith = credential.sharedWith?.map(id => id.toString()).includes(userId);
 
@@ -632,7 +689,7 @@ revokeAccess: async (req, res, next) => {
       const decryptedPassword = decrypt(credential.password);
 
       const populatedCredential = await Credential.findById(credentialId)
-        .populate('rootInstance', 'serviceName type')
+        .populate('rootInstance', 'serviceName')   // CHANGED: Removed type
         .populate('subInstance', 'name')
         .populate('createdBy', 'name email');
 
@@ -650,8 +707,9 @@ revokeAccess: async (req, res, next) => {
         serviceName: populatedCredential.rootInstance?.serviceName || 'Unknown',
         subInstanceName: populatedCredential.subInstance?.name || 'N/A',
         action: 'decrypt',
-        ipAddress:getClientIP(req).address,
-        userAgent: req.get('User-Agent')
+        ipAddress: getClientIP(req).address,
+        userAgent: req.get('User-Agent'),
+        timestamp: new Date()  // ADDED: timestamp field
       });
 
       res.json({
