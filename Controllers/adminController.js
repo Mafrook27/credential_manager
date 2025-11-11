@@ -322,21 +322,29 @@ const adminController = {
 
       // ===== SYSTEM-WIDE STATS (Admin Dashboard) =====
       const stats = {
-        // Total users in system
-        totalUsers: await User.countDocuments(),
+        // Total users in system (exclude deleted)
+        totalUsers: await User.countDocuments({ isDeleted: { $ne: true } }),
 
-        // Verified users
-        verifiedUsers: await User.countDocuments({ isVerified: true }),
+        // Verified users (exclude deleted)
+        verifiedUsers: await User.countDocuments({
+          isVerified: true,
+          isDeleted: { $ne: true }
+        }),
 
-        // Unverified users
-        unverifiedUsers: await User.countDocuments({ isVerified: false }),
+        // Unverified users (exclude deleted and admins)
+        unverifiedUsers: await User.countDocuments({
+          isVerified: false,
+          isDeleted: { $ne: true },
+          role: { $ne: 'admin' }
+        }),
 
         // Total credentials in system (exclude deleted)
         totalCredentials: await Credential.countDocuments({ isDeleted: { $ne: true } }),
 
-        // Active users (logged in last 30 days)
+        // Active users (logged in last 30 days, exclude deleted)
         activeUsers: await User.countDocuments({
-          lastLogin: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+          lastLogin: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+          isDeleted: { $ne: true }
         }),
 
         // Admin users
