@@ -74,13 +74,13 @@ const adminController = {
       const skip = (parsedPage - 1) * parsedLimit;
 
       const [users, total] = await Promise.all([
-        User.find()
+        User.find({ isDeleted: { $ne: true } })
           .select('-password')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(parsedLimit)
           .lean(),
-        User.countDocuments()
+        User.countDocuments({ isDeleted: { $ne: true } })
       ]);
 
       res.json({
@@ -169,16 +169,37 @@ const adminController = {
     try {
       const { id } = req.params;
 
-      const user = await User.findByIdAndDelete(id);
+      // Find user and check if already deleted
+      const user = await User.findById(id);
       if (!user) {
         const error = new Error('User not found');
         error.statusCode = 404;
         throw error;
       }
 
+      if (user.isDeleted) {
+        const error = new Error('User is already deleted');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Prevent deleting admin users
+      if (user.role === 'admin') {
+        const error = new Error('Cannot delete admin users');
+        error.statusCode = 403;
+        throw error;
+      }
+
+      // Soft delete: mark as deleted instead of removing from database
+      user.isDeleted = true;
+      user.deletedAt = new Date();
+      user.deletedBy = req.user._id;
+      user.isActive = false; // Also deactivate the user
+      await user.save();
+
       res.json({
         success: true,
-        message: 'User deleted successfully'
+        message: 'User disabled successfully'
       });
 
       logger.info('adminDeletedUser', { userId: id, performedBy: req.user._id });
@@ -378,32 +399,50 @@ const adminController = {
     }
   },
 
+  // Approve/Reject User - Toggle isVerified
   approveUser: async (req, res, next) => {
     try {
       const { id } = req.params;
 
       const user = await User.findById(id);
-      console.log("User to approve:", user); // Debugging line
       if (!user) {
         const error = new Error("User not found");
         error.statusCode = 404;
         throw error;
       }
 
-      user.isVerified = true;
+      // Prevent modifying admin users
+      if (user.role === 'admin') {
+        const error = new Error('Cannot modify admin users');
+        error.statusCode = 403;
+        throw error;
+      }
+
+      // Check if already deleted
+      if (user.isDeleted) {
+        const error = new Error('Cannot modify deleted users');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Toggle isVerified (Approve/Reject)
+      user.isVerified = !user.isVerified;
       await user.save();
 
+      const action = user.isVerified ? 'approved' : 'rejected';
       res.status(200).json({
         success: true,
-        message: `User ${user.email} approved successfully.`,
+        message: `User ${user.email} ${action} successfully.`,
       });
 
+      logger.info(`adminUser${action}`, { userId: id, performedBy: req.user._id });
     } catch (error) {
-      logger.error('addUseraccess ', { message: error.message, stack: error.stack });
+      logger.error('approveUser', { message: error.message, stack: error.stack });
       next(error);
     }
   },
 
+  // Block/Unblock User - Toggle isActive
   blockUser: async (req, res, next) => {
     try {
       const { id } = req.params;
@@ -415,15 +454,31 @@ const adminController = {
         throw error;
       }
 
-      user.isActive = false;
+      // Prevent modifying admin users
+      if (user.role === 'admin') {
+        const error = new Error('Cannot modify admin users');
+        error.statusCode = 403;
+        throw error;
+      }
+
+      // Check if already deleted
+      if (user.isDeleted) {
+        const error = new Error('Cannot modify deleted users');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Toggle isActive (Block/Unblock)
+      user.isActive = !user.isActive;
       await user.save();
 
+      const action = user.isActive ? 'unblocked' : 'blocked';
       res.status(200).json({
         success: true,
-        message: `User ${user.email} blocked successfully.`,
+        message: `User ${user.email} ${action} successfully.`,
       });
 
-      logger.info('blockUser', { userId: id, performedBy: req.user._id });
+      logger.info(`adminUser${action}`, { userId: id, performedBy: req.user._id });
     } catch (error) {
       logger.error('blockUser', { message: error.message, stack: error.stack });
       next(error);
