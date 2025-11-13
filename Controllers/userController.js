@@ -18,7 +18,7 @@ const userController = {
       }
 
       const user = await User.findById(id).select('-password');
-      if (!user) {
+      if (!user || user.isDeleted) {
         const error = new Error('User not found');
         error.statusCode = 404;
         throw error;
@@ -49,7 +49,7 @@ const userController = {
       }
 
       const user = await User.findById(id);
-      if (!user) {
+      if (!user || user.isDeleted) {
         const error = new Error('User not found');
         error.statusCode = 404;
         throw error;
@@ -86,7 +86,7 @@ const userController = {
     }
   },
 
-  // DELETE /api/user/:id - Delete user (owner only)
+  // DELETE /api/user/:id - Delete user (owner only) - Soft Delete
   deleteUser: async (req, res, next) => {
     try {
       const { id } = req.params;
@@ -99,11 +99,29 @@ const userController = {
         throw error;
       }
 
-      await User.findByIdAndDelete(id);
+      const user = await User.findById(id);
+      if (!user) {
+        const error = new Error('User not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      if (user.isDeleted) {
+        const error = new Error('User is already deleted');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Soft delete: mark as deleted instead of removing from database
+      user.isDeleted = true;
+      user.deletedAt = new Date();
+      user.deletedBy = currentUserId;
+      user.isActive = false; // Also deactivate the user
+      await user.save();
 
       res.json({
         success: true,
-        message: 'User deleted successfully'
+        message: 'Account deleted successfully'
       });
 
       logger.info('deletedProfile', { userId: id, performedBy: currentUserId });

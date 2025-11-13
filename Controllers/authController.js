@@ -127,9 +127,9 @@ const auth = {
       const ipAddress = req.ip || req.connection.remoteAddress;
 
       // Check for existing sessions before creating new one
-      const existingSessions = await Session.countDocuments({ userId: user._id });
+      const existingSessions = await Session.countDocuments({ userId: user._id, active: true });
       if (existingSessions > 0) {
-        logger.info(`🔄 User ${user.email} has ${existingSessions} existing session(s). Deleting old sessions...`);
+        logger.info(`🔄 User ${user.email} has ${existingSessions} existing active session(s). Will invalidate them (Single session enforcement)...`);
       }
 
       const { accessToken, refreshToken } = await createSession(
@@ -138,7 +138,7 @@ const auth = {
         ipAddress
       );
 
-      logger.info(`✅ New session created for user ${user.email}. Old sessions marked inactive.`);
+      logger.info(`✅ New session created for user ${user.email}. Previous sessions invalidated.`);
 
       // Get token expiry times from env
       const getAccessMaxAge = () => {
@@ -221,11 +221,30 @@ const auth = {
 
       // Find session and check if it's ACTIVE
       logger.info('🔍 Looking for session in database...');
-      const session = await Session.findOne({ refreshToken, active: true });
+      const session = await Session.findOne({ refreshToken });
 
       if (!session) {
-        logger.warn('❌ Session not found or inactive (logged in from another device)');
-        const error = new Error('Session invalid or logged in from another device. Please login again.');
+        logger.warn('❌ Session not found - token may be invalid');
+        const error = new Error('Session expired. Please login again.');
+        error.statusCode = 401;
+        error.code = 'SESSION_EXPIRED';
+        throw error;
+      }
+
+      // Check if session is inactive (logged out or logged in elsewhere)
+      if (!session.active) {
+        logger.warn('❌ Session is inactive - user logged out or logged in from another device');
+        const error = new Error('Session ended. You logged in from another device.');
+        error.statusCode = 401;
+        error.code = 'SESSION_INACTIVE';
+        throw error;
+      }
+
+      // Check if session is expired
+      if (session.expiresAt < new Date()) {
+        logger.warn('❌ Session expired naturally');
+        await Session.deleteOne({ _id: session._id });
+        const error = new Error('Session expired. Please login again.');
         error.statusCode = 401;
         error.code = 'SESSION_EXPIRED';
         throw error;

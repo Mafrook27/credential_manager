@@ -3,10 +3,10 @@ const router = express.Router();
 const adminUserController = require('../Controllers/adminController');
 const adminCredentialController = require('../Controllers/admin.creditionalController');
 const userCredentialController = require('../Controllers/user.creditionalController.js');
-const activitylog=require('../Controllers/activitylog');
+const activitylog = require('../Controllers/activitylog');
 const commonController = require('../Controllers/commonController');
 const { authenticateToken } = require('../Middleware/authenticateToken');
-const {requireAdmin} = require('../Middleware/Authoize');
+const { requireAdmin } = require('../Middleware/Authoize');
 const { validate } = require('../Middleware/validate');
 const { changePasswordSchema } = require('../validations/userValidation');
 const { createCredentialSchema, updateCredentialSchema } = require('../validations/credentialValidation');
@@ -16,10 +16,9 @@ router.use(authenticateToken, requireAdmin);
 
 // User 
 router.get('/users', track('ADMIN_READ_ALL_USERS'), adminUserController.getAllUsers);
-router.post('/users', track('ADMIN_CREATE_USER'), adminUserController.createUser); 
-router.get('/users/permission/:id', track('ADMIN_APPROVE_USER'), adminUserController.approveUser);
-router.get('/users/block/:id', track('ADMIN_BLOCK_USER'), adminUserController.blockUser);
-router.get('/users/unblock/:id', track('ADMIN_UNBLOCK_USER'), adminUserController.unblockUser);
+router.post('/users', track('ADMIN_CREATE_USER'), adminUserController.createUser);
+router.patch('/users/:id/verify', track('ADMIN_APPROVE_USER'), adminUserController.approveUser);
+router.patch('/users/:id/active', track('ADMIN_BLOCK_USER'), adminUserController.blockUser);
 router.get('/users/:id', track('ADMIN_READ_USER_PROFILE'), adminUserController.getUserProfile);
 router.put('/users/:id', track('ADMIN_UPDATE_USER'), adminUserController.updateUser);
 router.delete('/users/:id', track('ADMIN_DELETE_USER'), adminUserController.deleteUser);
@@ -37,13 +36,13 @@ router.post('/change-password', track('ADMIN_CHANGE_PASSWORD'), validate(changeP
 // Credential
 router.get('/credentials', track('ADMIN_READ_ALL_CREDENTIALS'), adminCredentialController.getAllCredentials);
 
-router.post('/credentials',track('ADMIN_CREATE_CREDENTIAL'), validate(createCredentialSchema), adminCredentialController.createCredential);
+router.post('/credentials', track('ADMIN_CREATE_CREDENTIAL'), validate(createCredentialSchema), adminCredentialController.createCredential);
 
 
 
 router.get('/credentials/:id', track('ADMIN_READ_CREDENTIAL'), adminCredentialController.getCredential);
 
-router.put('/credentials/:credId', track('ADMIN_UPDATE_CREDENTIAL'), validate(updateCredentialSchema),adminCredentialController.updateCredential);
+router.put('/credentials/:credId', track('ADMIN_UPDATE_CREDENTIAL'), validate(updateCredentialSchema), adminCredentialController.updateCredential);
 
 router.delete('/credentials/:id', track('ADMIN_DELETE_CREDENTIAL'), adminCredentialController.deleteCredential);
 router.get('/credentials/:id/decrypt', track('ADMIN_DECRYPT_CREDENTIAL'), adminCredentialController.getCredentialDecrypted);
@@ -2380,9 +2379,9 @@ module.exports = router;
  *         description: Server error
  */
 
-/**    
- * 
- * 
+/**
+ *
+ *
  * @swagger
  * components:
  *   schemas:
@@ -2560,7 +2559,7 @@ module.exports = router;
  *       scheme: bearer
  *       bearerFormat: JWT
  */
-  // routes/adminRoutes.js
+// routes/adminRoutes.js
 
 /**
  * @swagger

@@ -1,6 +1,7 @@
 const User = require('../models/CRED_User');
 const Credential = require('../models/Credential');
 const Audit = require('../models/Audit');
+const Session = require('../models/Session');
 const bcrypt = require("bcryptjs");
 const logger = require('../util/Logger');
 const mongoose = require('mongoose');
@@ -197,6 +198,10 @@ const adminController = {
       user.isActive = false; // Also deactivate the user
       await user.save();
 
+      // Invalidate all user sessions
+      await Session.deleteMany({ userId: id });
+      logger.info('userSessionsInvalidated', { userId: id, reason: 'deleted', performedBy: req.user._id });
+
       res.json({
         success: true,
         message: 'User disabled successfully'
@@ -338,14 +343,7 @@ const adminController = {
           role: { $ne: 'admin' }
         }),
 
-        // Total credentials in system (exclude deleted)
-        totalCredentials: await Credential.countDocuments({ isDeleted: { $ne: true } }),
-
-        // Active users (logged in last 30 days, exclude deleted)
-        activeUsers: await User.countDocuments({
-          lastLogin: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-          isDeleted: { $ne: true }
-        }),
+        // Total c
 
         // Admin users
         adminUsers: await User.countDocuments({ role: 'admin' }),
@@ -407,10 +405,18 @@ const adminController = {
     }
   },
 
-  // Approve/Reject User - Toggle isVerified
+  // Set User Verification Status
   approveUser: async (req, res, next) => {
     try {
       const { id } = req.params;
+      const { isVerified } = req.body;
+
+      // Validate request body
+      if (typeof isVerified !== 'boolean') {
+        const error = new Error('isVerified must be a boolean value');
+        error.statusCode = 400;
+        throw error;
+      }
 
       const user = await User.findById(id);
       if (!user) {
@@ -433,11 +439,17 @@ const adminController = {
         throw error;
       }
 
-      // Toggle isVerified (Approve/Reject)
-      user.isVerified = !user.isVerified;
+      // Set isVerified to explicit value
+      user.isVerified = isVerified;
       await user.save();
 
-      const action = user.isVerified ? 'approved' : 'rejected';
+      // If rejecting user, invalidate all their sessions
+      if (!isVerified) {
+        await Session.deleteMany({ userId: id });
+        logger.info('userSessionsInvalidated', { userId: id, reason: 'rejected', performedBy: req.user._id });
+      }
+
+      const action = isVerified ? 'approved' : 'rejected';
       res.status(200).json({
         success: true,
         message: `User ${user.email} ${action} successfully.`,
@@ -450,10 +462,18 @@ const adminController = {
     }
   },
 
-  // Block/Unblock User - Toggle isActive
+  // Set User Active Status (Block/Unblock)
   blockUser: async (req, res, next) => {
     try {
       const { id } = req.params;
+      const { isActive } = req.body;
+
+      // Validate request body
+      if (typeof isActive !== 'boolean') {
+        const error = new Error('isActive must be a boolean value');
+        error.statusCode = 400;
+        throw error;
+      }
 
       const user = await User.findById(id);
       if (!user) {
@@ -476,11 +496,17 @@ const adminController = {
         throw error;
       }
 
-      // Toggle isActive (Block/Unblock)
-      user.isActive = !user.isActive;
+      // Set isActive to explicit value
+      user.isActive = isActive;
       await user.save();
 
-      const action = user.isActive ? 'unblocked' : 'blocked';
+      // If blocking user, invalidate all their sessions
+      if (!isActive) {
+        await Session.deleteMany({ userId: id });
+        logger.info('userSessionsInvalidated', { userId: id, reason: 'blocked', performedBy: req.user._id });
+      }
+
+      const action = isActive ? 'unblocked' : 'blocked';
       res.status(200).json({
         success: true,
         message: `User ${user.email} ${action} successfully.`,
@@ -489,32 +515,6 @@ const adminController = {
       logger.info(`adminUser${action}`, { userId: id, performedBy: req.user._id });
     } catch (error) {
       logger.error('blockUser', { message: error.message, stack: error.stack });
-      next(error);
-    }
-  },
-
-  unblockUser: async (req, res, next) => {
-    try {
-      const { id } = req.params;
-
-      const user = await User.findById(id);
-      if (!user) {
-        const error = new Error("User not found");
-        error.statusCode = 404;
-        throw error;
-      }
-
-      user.isActive = true;
-      await user.save();
-
-      res.status(200).json({
-        success: true,
-        message: `User ${user.email} unblocked successfully.`,
-      });
-
-      logger.info('unblockUser', { userId: id, performedBy: req.user._id });
-    } catch (error) {
-      logger.error('unblockUser', { message: error.message, stack: error.stack });
       next(error);
     }
   },

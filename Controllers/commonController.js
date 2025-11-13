@@ -17,16 +17,14 @@ const commonController = {
         throw error;
       }
 
-
-
       // 🔄 Pagination setup
       const parsedLimit = Math.max(parseInt(limit), 1);
       const parsedPage = Math.max(parseInt(page), 1);
       const skip = (parsedPage - 1) * parsedLimit;
 
-      // 🔍 Fetch paginated users (id + name only)
+      // 🔍 Fetch paginated users (include status fields for frontend filtering)
       const [users, total] = await Promise.all([
-        User.find({}, '_id name')
+        User.find({}, '_id name email isVerified isActive isDeleted')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(parsedLimit)
