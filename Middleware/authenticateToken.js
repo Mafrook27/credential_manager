@@ -37,6 +37,32 @@ function authenticateToken(req, res, next) {
     const validateActiveSession = async () => {
       const refreshToken = req.cookies?.refreshToken; // ✅ Get THIS browser's refresh token
 
+      // If no refresh token in cookie, check if user has ANY active session
+      if (!refreshToken) {
+        logger.warn(`⚠️ No refresh token in cookie for user ${decoded.payload.id}`);
+
+        // Check if user has any active sessions
+        const anyActiveSession = await Session.findOne({
+          userId: decoded.payload.id,
+          active: true
+        });
+
+        if (!anyActiveSession) {
+          logger.warn(`❌ No active sessions found for user ${decoded.payload.id}`);
+          const error = new Error("Session expired. Please login again.");
+          error.statusCode = 401;
+          error.code = 'SESSION_EXPIRED';
+          throw error;
+        }
+
+        // User has active session but no refresh token - likely token expired
+        logger.warn(`⚠️ User has active session but no refresh token cookie`);
+        const error = new Error("Access token expired. Please refresh.");
+        error.statusCode = 401;
+        error.code = 'TOKEN_EXPIRED';
+        throw error;
+      }
+
       // Count all sessions for this user
       const allSessions = await Session.countDocuments({ userId: decoded.payload.id });
       const activeSessions = await Session.countDocuments({ userId: decoded.payload.id, active: true });
@@ -52,10 +78,26 @@ function authenticateToken(req, res, next) {
 
       if (!session) {
         logger.warn(`❌ No active session found for user ${decoded.payload.id} with this refresh token`);
-        const error = new Error("Session ended. You logged in from another device.");
-        error.statusCode = 401;
-        error.code = 'SESSION_INACTIVE';
-        throw error;
+
+        // Check if user has OTHER active sessions (logged in elsewhere)
+        const otherActiveSession = await Session.findOne({
+          userId: decoded.payload.id,
+          active: true
+        });
+
+        if (otherActiveSession) {
+          logger.warn(`⚠️ User has other active session - logged in from another device`);
+          const error = new Error("Session ended. You logged in from another device.");
+          error.statusCode = 401;
+          error.code = 'SESSION_INACTIVE';
+          throw error;
+        } else {
+          logger.warn(`⚠️ No active sessions found - session expired`);
+          const error = new Error("Session expired. Please login again.");
+          error.statusCode = 401;
+          error.code = 'SESSION_EXPIRED';
+          throw error;
+        }
       }
 
       logger.info(`✅ Active session validated for user ${decoded.payload.id} (Session ID: ${session._id})`);
