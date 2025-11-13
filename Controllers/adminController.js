@@ -614,8 +614,7 @@ const adminController = {
                           {
                             $project: {
                               credentialId: '$_id',
-                              username: '$username',
-                              url: '$url',
+                              fields: '$fields',
                               notes: '$notes',
                               createdAt: 1,
                               sharedWithCount: { $size: '$sharedWithUsers' },
@@ -734,8 +733,7 @@ const adminController = {
                     subName: { $arrayElemAt: ['$subData.name', 0] }
                   },
                   credentialData: {
-                    username: '$username',
-                    url: '$url',
+                    fields: '$fields',
                     notes: '$notes'
                   },
                   sharedBy: {

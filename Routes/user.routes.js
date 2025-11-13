@@ -66,15 +66,15 @@ router.post('/change-password', track('CHANGE_PASSWORD'), validate(changePasswor
 
 
 router.get('/credentials', track('READ_ALL_CREDENTIALS'), userCredentialController.getCredentials);
-router.post('/credentials', 
-  track('CREATE_CREDENTIAL'), 
-  validate(createCredentialSchema), 
+router.post('/credentials',
+  track('CREATE_CREDENTIAL'),
+  validate(createCredentialSchema),
   userCredentialController.createCredential
 );
 
-router.put('/credentials/:credId', 
-  track('UPDATE_CREDENTIAL'), 
-  validate(updateCredentialSchema), 
+router.put('/credentials/:credId',
+  track('UPDATE_CREDENTIAL'),
+  validate(updateCredentialSchema),
   userCredentialController.updateCredential
 );
 router.get('/credentials/:id/decrypt', track('DECRYPT_CREDENTIAL'), userCredentialController.getCredentialDecrypted);
@@ -595,7 +595,7 @@ module.exports = router;
  * /api/users/credentials:
  *   post:
  *     summary: Create a new credential
- *     description: Create a new credential entry. Requires rootId and subId as query parameters. Password will be encrypted before storage. Only one credential per sub-instance is allowed per user. Cannot create credentials in soft-deleted subinstances.
+ *     description: Create a new credential entry with flexible fields. Requires rootId and subId as query parameters. All field values will be encrypted before storage. Only one credential per sub-instance is allowed per user. Cannot create credentials in soft-deleted subinstances.
  *     tags: [User Credentials]
  *     security:
  *       - bearerAuth: []
@@ -621,21 +621,33 @@ module.exports = router;
  *           schema:
  *             type: object
  *             required:
- *               - username
- *               - password
+ *               - fields
  *             properties:
- *               username:
- *                 type: string
- *                 description: Username or email for the credential (will be encrypted)
- *                 example: "john.doe@company.com"
- *               password:
- *                 type: string
- *                 description: Password (will be encrypted)
- *                 example: "SecureP@ssw0rd123"
- *               url:
- *                 type: string
- *                 description: URL of the service (optional)
- *                 example: "https://mail.google.com"
+ *               fields:
+ *                 type: array
+ *                 description: Array of credential fields (all values will be encrypted)
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - key
+ *                     - value
+ *                   properties:
+ *                     key:
+ *                       type: string
+ *                       description: Field name/key
+ *                       example: "username"
+ *                     value:
+ *                       type: string
+ *                       description: Field value (will be encrypted)
+ *                       example: "john.doe@company.com"
+ *                 example:
+ *                   - key: "username"
+ *                     value: "john.doe@company.com"
+ *                   - key: "password"
+ *                     value: "SecureP@ssw0rd123"
+ *                   - key: "api_key"
+ *                     value: "sk_live_abc123xyz"
  *               notes:
  *                 type: string
  *                 description: Additional notes or comments (optional)
@@ -752,7 +764,7 @@ module.exports = router;
  * /api/users/credentials/{credId}:
  *   put:
  *     summary: Update my credential
- *     description: Update a credential you own. Only username, password, url, and notes can be updated. Service name and sub-instance cannot be changed. Only the owner can update credentials. Cannot update soft-deleted credentials or credentials in deleted subinstances.
+ *     description: Update a credential you own. Fields and notes can be updated. Service name and sub-instance cannot be changed. Only the owner can update credentials. Cannot update soft-deleted credentials or credentials in deleted subinstances.
  *     tags: [User Credentials]
  *     security:
  *       - bearerAuth: []
@@ -771,18 +783,29 @@ module.exports = router;
  *           schema:
  *             type: object
  *             properties:
- *               username:
- *                 type: string
- *                 description: Updated username (will be encrypted)
- *                 example: "updated.user@example.com"
- *               password:
- *                 type: string
- *                 description: Updated password (will be encrypted)
- *                 example: "NewP@ssw0rd456"
- *               url:
- *                 type: string
- *                 description: Updated service URL
- *                 example: "https://mail.google.com"
+ *               fields:
+ *                 type: array
+ *                 description: Updated array of credential fields (all values will be encrypted)
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - key
+ *                     - value
+ *                   properties:
+ *                     key:
+ *                       type: string
+ *                       description: Field name/key
+ *                       example: "username"
+ *                     value:
+ *                       type: string
+ *                       description: Field value (will be encrypted)
+ *                       example: "updated.user@example.com"
+ *                 example:
+ *                   - key: "username"
+ *                     value: "updated.user@example.com"
+ *                   - key: "password"
+ *                     value: "NewP@ssw0rd456"
  *               notes:
  *                 type: string
  *                 description: Updated notes

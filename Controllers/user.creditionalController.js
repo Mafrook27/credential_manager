@@ -197,7 +197,7 @@ const userCredentialController = {
     try {
       const userId = req.payload.id;
       const { rootId, subId } = req.query;
-      const { username, password, url, notes } = req.body;
+      const { fields, notes } = req.body;
 
       // ADDED: Validation checks
       if (!rootId || !subId) {
@@ -206,8 +206,8 @@ const userCredentialController = {
         throw error;
       }
 
-      if (!username || !password) {
-        const error = new Error('username and password are required');
+      if (!fields || !Array.isArray(fields) || fields.length === 0) {
+        const error = new Error('At least one credential field is required');
         error.statusCode = 400;
         throw error;
       }
@@ -253,13 +253,17 @@ const userCredentialController = {
         throw error;
       }
 
+      // Encrypt all field values
+      const encryptedFields = fields.map(field => ({
+        key: field.key,
+        value: encrypt(field.value)
+      }));
+
       const credential = await Credential.create({
         rootInstance: rootId,
         subInstance: subId,
         createdBy: userId,
-        username: encrypt(username),
-        password: encrypt(password),
-        url: url || '',
+        fields: encryptedFields,
         notes: notes || ''
       });
 
@@ -305,7 +309,7 @@ const userCredentialController = {
     try {
       const userId = req.payload.id;
       const credId = req.params.credId;
-      const { username, password, url, notes } = req.body;
+      const { fields, notes } = req.body;
 
       const credential = await Credential.findById(credId)
         .populate('rootInstance', 'serviceName')  // CHANGED: Removed type
@@ -339,9 +343,12 @@ const userCredentialController = {
       }
 
 
-      if (username) credential.username = encrypt(username);
-      if (password) credential.password = encrypt(password);
-      if (url !== undefined) credential.url = url;
+      if (fields && Array.isArray(fields) && fields.length > 0) {
+        credential.fields = fields.map(field => ({
+          key: field.key,
+          value: encrypt(field.value)
+        }));
+      }
       if (notes !== undefined) credential.notes = notes;
 
       await credential.save();
@@ -685,8 +692,11 @@ const userCredentialController = {
         throw error;
       }
 
-      const decryptedUsername = decrypt(credential.username);
-      const decryptedPassword = decrypt(credential.password);
+      // Decrypt all fields
+      const decryptedFields = credential.fields.map(field => ({
+        key: field.key,
+        value: decrypt(field.value)
+      }));
 
       const populatedCredential = await Credential.findById(credentialId)
         .populate('rootInstance', 'serviceName')   // CHANGED: Removed type
@@ -696,8 +706,7 @@ const userCredentialController = {
       const credentialObj = populatedCredential.toObject();
       const decryptedCredential = {
         ...credentialObj,
-        username: decryptedUsername,
-        password: decryptedPassword
+        fields: decryptedFields
       };
 
       await Audit.create({

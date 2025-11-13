@@ -1,61 +1,61 @@
 const mongoose = require("mongoose");
 
 const credentialSchema = new mongoose.Schema({
-  subInstance: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "SubInstance", 
-    required: true 
+  subInstance: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "SubInstance",
+    required: true
   },
-  rootInstance: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "RootInstance", 
-    required: true 
+  rootInstance: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "RootInstance",
+    required: true
   },
-  createdBy: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "C_User", 
-    required: true 
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "C_User",
+    required: true
   },
-  sharedWith: [{ 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "C_User" 
+  sharedWith: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "C_User"
   }],
-  username: { 
-    type: String, 
-    required: true 
-  },
-  password: { 
-    type: String, 
-    required: true 
-  },
-  url: { 
+  fields: [
+    {
+      key: {
+        type: String,
+        required: true
+      },
+      value: {
+        type: String,
+        required: true
+      }
+    }
+  ],
+  notes: {
     type: String,
     default: ''
   },
-  notes: { 
-    type: String,
-    default: ''
+  lastAccessed: {
+    type: Date
   },
-  lastAccessed: { 
-    type: Date 
-  },
-  isDeleted: { 
-    type: Boolean, 
+  isDeleted: {
+    type: Boolean,
     default: false,
     index: true
   },
-  deletedAt: { 
-    type: Date, 
-    default: null 
+  deletedAt: {
+    type: Date,
+    default: null
   },
-  deletedBy: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "C_User", 
-    default: null 
+  deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "C_User",
+    default: null
   },
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
+  createdAt: {
+    type: Date,
+    default: Date.now
   }
 }, { versionKey: false });
 

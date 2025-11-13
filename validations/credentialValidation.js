@@ -10,7 +10,7 @@ const createCredentialSchema = Joi.object({
       'string.pattern.base': 'Invalid root instance ID format',
       'any.required': 'Root instance ID is required (use ?rootId=xxx in URL)'
     }),
-  
+
   subId: Joi.string()
     .pattern(/^[0-9a-fA-F]{24}$/)
     .required()
@@ -19,34 +19,36 @@ const createCredentialSchema = Joi.object({
       'string.pattern.base': 'Invalid sub-instance ID format',
       'any.required': 'Sub-instance ID is required (use ?subId=xxx in URL)'
     }),
-  
 
-  username: Joi.string()
-    .trim()
+
+  fields: Joi.array()
+    .items(
+      Joi.object({
+        key: Joi.string()
+          .trim()
+          .min(1)
+          .max(100)
+          .required()
+          .messages({
+            'string.empty': 'Field key is required',
+            'any.required': 'Field key is required'
+          }),
+        value: Joi.string()
+          .min(1)
+          .required()
+          .messages({
+            'string.empty': 'Field value is required',
+            'any.required': 'Field value is required'
+          })
+      })
+    )
     .min(1)
-    .max(100)
     .required()
     .messages({
-      'string.empty': 'Username is required',
-      'any.required': 'Username is required'
+      'array.min': 'At least one credential field is required',
+      'any.required': 'Fields array is required'
     }),
-  
-  password: Joi.string()
-    .min(1)
-    .required()
-    .messages({
-      'string.empty': 'Password is required',
-      'any.required': 'Password is required'
-    }),
-  
-  url: Joi.string()
-    .uri()
-    .optional()
-    .allow('')
-    .messages({
-      'string.uri': 'Invalid URL format'
-    }),
-  
+
   notes: Joi.string()
     .max(500)
     .optional()
@@ -58,30 +60,33 @@ const createCredentialSchema = Joi.object({
 
 
 const updateCredentialSchema = Joi.object({
-  username: Joi.string()
-    .trim()
+  fields: Joi.array()
+    .items(
+      Joi.object({
+        key: Joi.string()
+          .trim()
+          .min(1)
+          .max(100)
+          .required()
+          .messages({
+            'string.empty': 'Field key is required',
+            'any.required': 'Field key is required'
+          }),
+        value: Joi.string()
+          .min(1)
+          .required()
+          .messages({
+            'string.empty': 'Field value is required',
+            'any.required': 'Field value is required'
+          })
+      })
+    )
     .min(1)
-    .max(100)
     .optional()
     .messages({
-      'string.empty': 'Username cannot be empty'
+      'array.min': 'At least one credential field is required'
     }),
-  
-  password: Joi.string()
-    .min(1)
-    .optional()
-    .messages({
-      'string.empty': 'Password cannot be empty'
-    }),
-  
-  url: Joi.string()
-    .uri()
-    .optional()
-    .allow('')
-    .messages({
-      'string.uri': 'Invalid URL format'
-    }),
-  
+
   notes: Joi.string()
     .max(500)
     .optional()
@@ -107,8 +112,8 @@ const shareCredentialSchema = Joi.object({
     })
 });
 
-module.exports = { 
-  createCredentialSchema, 
-  updateCredentialSchema, 
-  shareCredentialSchema 
+module.exports = {
+  createCredentialSchema,
+  updateCredentialSchema,
+  shareCredentialSchema
 };

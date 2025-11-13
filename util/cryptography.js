@@ -62,16 +62,26 @@ function getDisplayCredential(credential) {
     ? credential.toObject()
     : credential;
 
-  const decryptedUsername = decrypt(credential.username);
+  // Handle fields array - decrypt and fade sensitive values
+  const displayFields = credentialObj.fields ? credentialObj.fields.map(field => {
+    const decryptedValue = decrypt(field.value);
+    // Fade the value (show first and last char with stars in between)
+    const fadedValue = decryptedValue.length <= 2
+      ? "**"
+      : decryptedValue[0] + "*".repeat(decryptedValue.length - 2) + decryptedValue[decryptedValue.length - 1];
+
+    return {
+      key: field.key,
+      value: fadedValue
+    };
+  }) : [];
 
   return {
-     _id: credentialObj._id,
+    _id: credentialObj._id,
     rootInstance: credentialObj.rootInstance,
     subInstance: credentialObj.subInstance,
-     credentialData: {
-       username: fadeUsername(decryptedUsername),
-      password: credentialObj.password,
-      url: credentialObj.url,
+    credentialData: {
+      fields: displayFields,
       notes: credentialObj.notes,
     },
     sharedWith: credentialObj.sharedWith || [],
@@ -85,17 +95,18 @@ function getDecryptedCredential(credential) {
     ? credential.toObject()
     : credential;
 
-  const decryptedUsername = decrypt(credential.username);
-  const decryptedPassword = decrypt(credential.password);
+  // Handle fields array - decrypt all values
+  const decryptedFields = credentialObj.fields ? credentialObj.fields.map(field => ({
+    key: field.key,
+    value: decrypt(field.value)
+  })) : [];
 
   return {
     _id: credentialObj._id,
     rootInstance: credentialObj.rootInstance,
     subInstance: credentialObj.subInstance,
-     credentialData: {
-      username: decryptedUsername,
-      password: decryptedPassword,
-      url: credentialObj.url,
+    credentialData: {
+      fields: decryptedFields,
       notes: credentialObj.notes,
     },
     sharedWith: credentialObj.sharedWith || [],
