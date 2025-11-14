@@ -588,61 +588,10 @@ const adminController = {
                     { $match: { isDeleted: false } },  // ADDED: Filter soft-deleted subinstances
                     ...(subMatchConditions.length > 0 ? [{ $match: { $or: subMatchConditions } }] : []),
                     {
-                      $lookup: {
-                        from: 'credentials',
-                        let: { subId: '$_id', userId: '$$userId' },
-                        pipeline: [
-                          {
-                            $match: {
-                              $expr: {
-                                $and: [
-                                  { $eq: ['$subInstance', '$$subId'] },
-                                  { $eq: ['$createdBy', '$$userId'] },
-                                  { $ne: ['$isDeleted', true] }  // ADDED: Filter soft-deleted credentials
-                                ]
-                              }
-                            }
-                          },
-                          {
-                            $lookup: {
-                              from: 'c_users',
-                              localField: 'sharedWith',
-                              foreignField: '_id',
-                              as: 'sharedWithUsers'
-                            }
-                          },
-                          {
-                            $project: {
-                              credentialId: '$_id',
-                              fields: '$fields',
-                              notes: '$notes',
-                              createdAt: 1,
-                              sharedWithCount: { $size: '$sharedWithUsers' },
-                              sharedWith: {
-                                $map: {
-                                  input: '$sharedWithUsers',
-                                  as: 'user',
-                                  in: {
-                                    userId: '$$user._id',
-                                    name: '$$user.name',
-                                    email: '$$user.email',
-                                    sharedAt: '$createdAt'
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        ],
-                        as: 'credentials'
-                      }
-                    },
-                    {
                       $project: {
                         subId: '$_id',
                         subName: '$name',
-                        createdAt: 1,
-                        credentialsCount: { $size: '$credentials' },
-                        credentials: 1
+                        createdAt: 1
                       }
                     }
                   ],
@@ -659,6 +608,97 @@ const adminController = {
               }
             ],
             as: 'myInstances'
+          }
+        },
+        {
+          $lookup: {
+            from: 'credentials',
+            let: { userId: '$_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ['$createdBy', '$$userId'] },
+                      { $ne: ['$isDeleted', true] }
+                    ]
+                  }
+                }
+              },
+              {
+                $lookup: {
+                  from: 'rootinstances',
+                  localField: 'rootInstance',
+                  foreignField: '_id',
+                  as: 'rootData'
+                }
+              },
+              {
+                $lookup: {
+                  from: 'subinstances',
+                  let: { subId: '$subInstance' },
+                  pipeline: [
+                    { $match: { $expr: { $eq: ['$_id', '$$subId'] } } },
+                    { $match: { isDeleted: false } }
+                  ],
+                  as: 'subData'
+                }
+              },
+              ...(rootMatchConditions.length > 0 ? [{
+                $match: {
+                  $and: rootMatchConditions.map(cond => {
+                    const key = Object.keys(cond)[0];
+                    return { [`rootData.${key}`]: cond[key] };
+                  })
+                }
+              }] : []),
+              ...(subMatchConditions.length > 0 ? [{
+                $match: {
+                  $or: subMatchConditions.map(cond => {
+                    const key = Object.keys(cond)[0];
+                    return { [`subData.${key}`]: cond[key] };
+                  })
+                }
+              }] : []),
+              {
+                $lookup: {
+                  from: 'c_users',
+                  localField: 'sharedWith',
+                  foreignField: '_id',
+                  as: 'sharedWithUsers'
+                }
+              },
+              {
+                $project: {
+                  credentialId: '$_id',
+                  rootInstance: {
+                    rootId: { $arrayElemAt: ['$rootData._id', 0] },
+                    rootName: { $arrayElemAt: ['$rootData.serviceName', 0] }
+                  },
+                  subInstance: {
+                    subId: { $arrayElemAt: ['$subData._id', 0] },
+                    subName: { $arrayElemAt: ['$subData.name', 0] }
+                  },
+                  fields: '$fields',
+                  notes: '$notes',
+                  createdAt: 1,
+                  sharedWithCount: { $size: '$sharedWithUsers' },
+                  sharedWith: {
+                    $map: {
+                      input: '$sharedWithUsers',
+                      as: 'user',
+                      in: {
+                        userId: '$$user._id',
+                        name: '$$user.name',
+                        email: '$$user.email',
+                        sharedAt: '$createdAt'
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            as: 'myCredentials'
           }
         }] : []),
 
@@ -726,7 +766,6 @@ const adminController = {
                   rootInstance: {
                     rootId: { $arrayElemAt: ['$rootData._id', 0] },
                     rootName: { $arrayElemAt: ['$rootData.serviceName', 0] }
-                    // CHANGED: Removed type field
                   },
                   subInstance: {
                     subId: { $arrayElemAt: ['$subData._id', 0] },
@@ -762,46 +801,14 @@ const adminController = {
                   }
                 }
               },
-              credentialsOwned: {
-                $sum: {
-                  $map: {
-                    input: { $ifNull: ['$myInstances', []] },
-                    as: 'root',
-                    in: {
-                      $sum: {
-                        $map: {
-                          input: { $ifNull: ['$$root.subInstances', []] },
-                          as: 'sub',
-                          in: { $size: { $ifNull: ['$$sub.credentials', []] } }
-                        }
-                      }
-                    }
-                  }
-                }
-              },
+              credentialsOwned: { $size: { $ifNull: ['$myCredentials', []] } },
               credentialsSharedWithMe: { $size: { $ifNull: ['$sharedAccess', []] } },
               credentialsIShared: {
                 $sum: {
                   $map: {
-                    input: { $ifNull: ['$myInstances', []] },
-                    as: 'root',
-                    in: {
-                      $sum: {
-                        $map: {
-                          input: { $ifNull: ['$$root.subInstances', []] },
-                          as: 'sub',
-                          in: {
-                            $sum: {
-                              $map: {
-                                input: { $ifNull: ['$$sub.credentials', []] },
-                                as: 'cred',
-                                in: { $ifNull: ['$$cred.sharedWithCount', 0] }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
+                    input: { $ifNull: ['$myCredentials', []] },
+                    as: 'cred',
+                    in: { $ifNull: ['$$cred.sharedWithCount', 0] }
                   }
                 }
               }
@@ -817,6 +824,7 @@ const adminController = {
             role: 1,
             summary: 1,
             myInstances: { $ifNull: ['$myInstances', []] },
+            myCredentials: { $ifNull: ['$myCredentials', []] },
             sharedAccess: { $ifNull: ['$sharedAccess', []] }
           }
         },
@@ -828,6 +836,8 @@ const adminController = {
               { email: { $regex: escapeRegex(search.trim()), $options: 'i' } },
               { 'myInstances.rootName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
               { 'myInstances.subInstances.subName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
+              { 'myCredentials.rootInstance.rootName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
+              { 'myCredentials.subInstance.subName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
               { 'sharedAccess.rootInstance.rootName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
               { 'sharedAccess.subInstance.subName': { $regex: escapeRegex(search.trim()), $options: 'i' } }
             ]
@@ -835,6 +845,7 @@ const adminController = {
         }] : []),
 
         { $sort: { name: 1 } },
+
         {
           $facet: {
             metadata: [
@@ -862,7 +873,10 @@ const adminController = {
           role: user.role
         },
         summary: user.summary,
-        ...(showMyInstances && { myInstances: user.myInstances }),
+        ...(showMyInstances && {
+          myInstances: user.myInstances,
+          myCredentials: user.myCredentials
+        }),
         ...(showSharedAccess && { sharedAccess: user.sharedAccess })
       }));
 
@@ -888,14 +902,14 @@ const adminController = {
         queryContext = {
           filter: 'accessGivenByMe',
           description: `Credentials that ${userName} has shared with other users`,
-          focusArea: 'myInstances.credentials.sharedWith'
+          focusArea: 'myCredentials.sharedWith'
         };
       } else if (isAccessGivenByMe) {
         message = 'Showing credentials shared BY users';
         queryContext = {
           filter: 'accessGivenByMe',
           description: 'Credentials that these users have shared with others',
-          focusArea: 'myInstances.credentials.sharedWith'
+          focusArea: 'myCredentials.sharedWith'
         };
       } else if (userName) {
         message = `Showing complete access details for ${userName}`;
@@ -923,10 +937,8 @@ const adminController = {
       logger.error('adminGetUserAccess', { message: error.message, stack: error.stack });
       next(error);
     }
-  }
-
+  },
 }
-
 
 
 module.exports = adminController;
