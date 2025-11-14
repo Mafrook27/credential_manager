@@ -518,10 +518,10 @@ const auth = {
             email: email,                       // Goes to {{email}} in template
             reset_token: token                  // Goes to {{reset_token}} in template
           },
-          {
-            publicKey: process.env.EMAILJS_PUBLIC_KEY,
-            privateKey: process.env.EMAILJS_PRIVATE_KEY,
-          }
+          // {
+          //   publicKey: process.env.EMAILJS_PUBLIC_KEY,
+          //   privateKey: process.env.EMAILJS_PRIVATE_KEY,
+          // }
         );
 
         logger.info(`✅ Reset email sent successfully to ${email}`, {
