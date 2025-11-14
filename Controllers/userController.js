@@ -116,7 +116,7 @@ const userController = {
       user.isDeleted = true;
       user.deletedAt = new Date();
       user.deletedBy = currentUserId;
-      user.isActive = true; // Also deactivate the user
+
       await user.save();
 
       res.json({

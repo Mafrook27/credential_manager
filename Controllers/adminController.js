@@ -195,7 +195,7 @@ const adminController = {
       user.isDeleted = true;
       user.deletedAt = new Date();
       user.deletedBy = req.user._id;
-      user.isActive = true; // Also deactivate the user
+
       await user.save();
 
       // Invalidate all user sessions
