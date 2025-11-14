@@ -96,11 +96,13 @@ const auth = {
       }
 
       const user = await User.findOne({ email });
-      if (!user) {
+
+      if (!user || user.isDeleted) {
         const error = new Error('Invalid credentials');
         error.statusCode = 401;
         throw error;
       }
+
 
       const ok = await bcrypt.compare(password, user.password);
       if (!ok) {
