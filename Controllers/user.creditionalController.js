@@ -471,8 +471,17 @@ const userCredentialController = {
     try {
       const credentialId = req.params.id;
       const userId = req.payload.id;
-      const { userId: targetUserId } = req.body;
-      const userRole = req.user?.role; // From authorize middleware
+      const { userId: targetUserId, userIds: targetUserIds } = req.body;
+      const userRole = req.user?.role;
+
+      // Support both single userId and multiple userIds
+      const targetUsers = targetUserIds || (targetUserId ? [targetUserId] : []);
+
+      if (!targetUsers || targetUsers.length === 0) {
+        const error = new Error('At least one user ID is required');
+        error.statusCode = 400;
+        throw error;
+      }
 
       const credential = await Credential.findById(credentialId)
         .populate('rootInstance', 'serviceName')
@@ -489,6 +498,7 @@ const userCredentialController = {
         error.statusCode = 403;
         throw error;
       }
+
       // Owner can share, or admin can share any credential
       const isOwner = credential.createdBy.toString() === userId;
       const isAdmin = userRole === 'admin';
@@ -499,49 +509,75 @@ const userCredentialController = {
         throw error;
       }
 
-      // Rest of your existing code remains the same...
-      const targetUser = await User.findById(targetUserId);
-      if (!targetUser) {
-        const error = new Error('User not found');
-        error.statusCode = 404;
-        throw error;
+      const results = {
+        shared: [],
+        alreadyShared: [],
+        errors: []
+      };
+
+      // Process each target user
+      for (const targetUserId of targetUsers) {
+        try {
+          // Validate target user exists
+          const targetUser = await User.findById(targetUserId);
+          if (!targetUser) {
+            results.errors.push({ userId: targetUserId, error: 'User not found' });
+            continue;
+          }
+
+          // Cannot share with yourself
+          if (targetUserId === userId) {
+            results.errors.push({ userId: targetUserId, error: 'Cannot share with yourself' });
+            continue;
+          }
+
+          // Check if already shared
+          if (credential.sharedWith.includes(targetUserId)) {
+            results.alreadyShared.push({ userId: targetUserId, name: targetUser.name });
+            continue;
+          }
+
+          // Share with user
+          credential.sharedWith.push(targetUserId);
+          results.shared.push({ userId: targetUserId, name: targetUser.name });
+
+          // Create audit log
+          await Audit.create({
+            user: userId,
+            credential: credentialId,
+            credentialOwner: credential.createdBy,
+            serviceName: credential.rootInstance.serviceName,
+            subInstanceName: credential.subInstance?.name || 'N/A',
+            action: 'share',
+            targetUser: targetUserId,
+            ipAddress: getClientIP(req).address,
+            userAgent: req.get('User-Agent'),
+            timestamp: new Date()
+          });
+        } catch (err) {
+          results.errors.push({ userId: targetUserId, error: err.message });
+        }
       }
 
-      if (targetUserId === userId) {
-        const error = new Error('Cannot share with yourself');
-        error.statusCode = 400;
-        throw error;
+      // Save credential if any users were shared
+      if (results.shared.length > 0) {
+        await credential.save();
       }
-
-      if (credential.sharedWith.includes(targetUserId)) {
-        const error = new Error('Already shared with this user');
-        error.statusCode = 409;
-        throw error;
-      }
-
-      credential.sharedWith.push(targetUserId);
-      await credential.save();
-
-      await Audit.create({
-        user: userId,
-        credential: credentialId,
-        credentialOwner: credential.createdBy,
-        serviceName: credential.rootInstance.serviceName,
-        subInstanceName: credential.subInstance?.name || 'N/A',
-        action: 'share',
-        targetUser: targetUserId,
-        ipAddress: getClientIP(req).address,
-        userAgent: req.get('User-Agent'),
-        timestamp: new Date()  // ADDED: timestamp field
-      });
 
       const updatedCredential = await Credential.findById(credentialId)
         .populate('sharedWith', 'name email');
 
+      const message = results.shared.length > 0
+        ? `Credential shared with ${results.shared.length} user(s) successfully`
+        : 'No new users were shared';
+
       res.json({
         success: true,
-        data: { credential: updatedCredential },
-        message: 'Credential shared successfully'
+        data: {
+          credential: updatedCredential,
+          results
+        },
+        message
       });
 
     } catch (error) {
