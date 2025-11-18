@@ -865,7 +865,47 @@ const adminController = {
       const total = result[0].metadata[0]?.total || 0;
       const rawUsers = result[0].data || [];
 
-      const users = rawUsers.map(user => ({
+      // Filter users based on rootName/subName filters
+      const filteredUsers = rawUsers.filter(user => {
+        // If no filters applied, show all users
+        if (!rootName && !subName && !search) {
+          return true;
+        }
+
+        // Check if user has any matching data
+        const hasMatchingInstances = user.myInstances?.some(instance => {
+          const rootMatches = !rootName || instance.rootName?.toLowerCase().includes(rootName.toLowerCase());
+          const subMatches = !subName || instance.subInstances?.some(sub =>
+            sub.subName?.toLowerCase().includes(subName.toLowerCase())
+          );
+          return rootMatches && (!subName || subMatches);
+        });
+
+        const hasMatchingCredentials = user.myCredentials?.some(cred => {
+          const rootMatches = !rootName || cred.rootInstance?.rootName?.toLowerCase().includes(rootName.toLowerCase());
+          const subMatches = !subName || cred.subInstance?.subName?.toLowerCase().includes(subName.toLowerCase());
+          return rootMatches && subMatches;
+        });
+
+        const hasMatchingSharedAccess = user.sharedAccess?.some(access => {
+          const rootMatches = !rootName || access.rootInstance?.rootName?.toLowerCase().includes(rootName.toLowerCase());
+          const subMatches = !subName || access.subInstance?.subName?.toLowerCase().includes(subName.toLowerCase());
+          return rootMatches && subMatches;
+        });
+
+        // For search, check if user name/email matches OR has matching data
+        if (search) {
+          const searchLower = search.toLowerCase();
+          const userMatches = user.name?.toLowerCase().includes(searchLower) ||
+            user.email?.toLowerCase().includes(searchLower);
+          return userMatches || hasMatchingInstances || hasMatchingCredentials || hasMatchingSharedAccess;
+        }
+
+        // For rootName/subName filters, user must have matching data
+        return hasMatchingInstances || hasMatchingCredentials || hasMatchingSharedAccess;
+      });
+
+      const users = filteredUsers.map(user => ({
         userId: user.userId,
         userDetails: {
           name: user.name,
@@ -927,8 +967,8 @@ const adminController = {
         pagination: {
           page: parsedPage,
           limit: parsedLimit,
-          totalUsers: total,
-          totalPages: Math.ceil(total / parsedLimit)
+          totalUsers: users.length,  // Use filtered count
+          totalPages: Math.ceil(users.length / parsedLimit)
         },
         data: { users }
       });
