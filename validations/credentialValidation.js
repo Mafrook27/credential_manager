@@ -102,15 +102,32 @@ const shareCredentialSchema = Joi.object({
   userId: Joi.string()
     .trim()
     .pattern(/^[0-9a-fA-F]{24}$/)
-    .required()
     .example('507f1f77bcf86cd799439011')
-    .description('ID of the user to share with')
+    .description('ID of the user to share with (single user)')
     .messages({
       'string.empty': 'User ID is required',
-      'string.pattern.base': 'Invalid user ID format (must be MongoDB ObjectId)',
-      'any.required': 'User ID is required'
+      'string.pattern.base': 'Invalid user ID format (must be MongoDB ObjectId)'
+    }),
+  userIds: Joi.array()
+    .items(
+      Joi.string()
+        .trim()
+        .pattern(/^[0-9a-fA-F]{24}$/)
+        .messages({
+          'string.pattern.base': 'Invalid user ID format (must be MongoDB ObjectId)'
+        })
+    )
+    .min(1)
+    .description('Array of user IDs to share with (bulk share)')
+    .messages({
+      'array.min': 'At least one user ID is required'
     })
-});
+})
+  .xor('userId', 'userIds')
+  .messages({
+    'object.missing': 'Either userId or userIds is required',
+    'object.xor': 'Provide either userId or userIds, not both'
+  });
 
 module.exports = {
   createCredentialSchema,
