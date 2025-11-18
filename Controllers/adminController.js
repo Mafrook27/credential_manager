@@ -865,12 +865,33 @@ const adminController = {
       const total = result[0].metadata[0]?.total || 0;
       const rawUsers = result[0].data || [];
 
+      // Debug logging
+      console.log('=== ACCESS CONTROL FILTERS ===');
+      console.log('rootName:', rootName);
+      console.log('subName:', subName);
+      console.log('search:', search);
+      console.log('Total users from DB:', rawUsers.length);
+
+      if (rawUsers.length > 0 && rootName) {
+        rawUsers.forEach(u => {
+          console.log(`User: ${u.name}`);
+          console.log('  myInstances:', u.myInstances?.map(i => i.rootName));
+          console.log('  myCredentials:', u.myCredentials?.map(c => c.rootInstance?.rootName));
+        });
+      }
+
       // Filter users based on rootName/subName filters
       const filteredUsers = rawUsers.filter(user => {
         // If no filters applied, show all users
         if (!rootName && !subName && !search) {
           return true;
         }
+
+        logger.info(`Filtering user: ${user.name}`, {
+          hasInstances: !!user.myInstances?.length,
+          hasCredentials: !!user.myCredentials?.length,
+          hasSharedAccess: !!user.sharedAccess?.length
+        });
 
         // Check if user has any matching data
         const hasMatchingInstances = user.myInstances?.some(instance => {
@@ -928,7 +949,8 @@ const adminController = {
         userDetails: {
           name: user.name,
           email: user.email,
-          role: user.role
+          role: user.role,
+          lastLogin: user.lastLogin
         },
         summary: user.summary,
         ...(showMyInstances && {
