@@ -874,30 +874,48 @@ const adminController = {
 
         // Check if user has any matching data
         const hasMatchingInstances = user.myInstances?.some(instance => {
-          const rootMatches = !rootName || instance.rootName?.toLowerCase().includes(rootName.toLowerCase());
-          const subMatches = !subName || instance.subInstances?.some(sub =>
-            sub.subName?.toLowerCase().includes(subName.toLowerCase())
-          );
-          return rootMatches && (!subName || subMatches);
+          if (!instance) return false;
+
+          const rootMatches = !rootName || (instance.rootName && instance.rootName.toLowerCase().includes(rootName.toLowerCase()));
+
+          if (subName) {
+            // If subName filter is applied, check if any sub instance matches
+            const hasMatchingSub = instance.subInstances?.some(sub =>
+              sub && sub.subName && sub.subName.toLowerCase().includes(subName.toLowerCase())
+            );
+            return rootMatches && hasMatchingSub;
+          }
+
+          return rootMatches;
         });
 
         const hasMatchingCredentials = user.myCredentials?.some(cred => {
-          const rootMatches = !rootName || cred.rootInstance?.rootName?.toLowerCase().includes(rootName.toLowerCase());
-          const subMatches = !subName || cred.subInstance?.subName?.toLowerCase().includes(subName.toLowerCase());
+          if (!cred) return false;
+
+          const rootMatches = !rootName || (cred.rootInstance?.rootName &&
+            cred.rootInstance.rootName.toLowerCase().includes(rootName.toLowerCase()));
+          const subMatches = !subName || (cred.subInstance?.subName &&
+            cred.subInstance.subName.toLowerCase().includes(subName.toLowerCase()));
+
           return rootMatches && subMatches;
         });
 
         const hasMatchingSharedAccess = user.sharedAccess?.some(access => {
-          const rootMatches = !rootName || access.rootInstance?.rootName?.toLowerCase().includes(rootName.toLowerCase());
-          const subMatches = !subName || access.subInstance?.subName?.toLowerCase().includes(subName.toLowerCase());
+          if (!access) return false;
+
+          const rootMatches = !rootName || (access.rootInstance?.rootName &&
+            access.rootInstance.rootName.toLowerCase().includes(rootName.toLowerCase()));
+          const subMatches = !subName || (access.subInstance?.subName &&
+            access.subInstance.subName.toLowerCase().includes(subName.toLowerCase()));
+
           return rootMatches && subMatches;
         });
 
         // For search, check if user name/email matches OR has matching data
         if (search) {
           const searchLower = search.toLowerCase();
-          const userMatches = user.name?.toLowerCase().includes(searchLower) ||
-            user.email?.toLowerCase().includes(searchLower);
+          const userMatches = (user.name && user.name.toLowerCase().includes(searchLower)) ||
+            (user.email && user.email.toLowerCase().includes(searchLower));
           return userMatches || hasMatchingInstances || hasMatchingCredentials || hasMatchingSharedAccess;
         }
 
