@@ -7,6 +7,9 @@ const mongoose = require('mongoose');
 const logger = require('../util/Logger');
 const { getClientIP } = require('../util/clientIp');
 
+// Escape special regex characters to prevent regex errors
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const instanceController = {
 
   // POST /api/instances
@@ -16,7 +19,7 @@ const instanceController = {
       const { serviceName } = req.body;
 
       const existingInstance = await RootInstance.findOne({
-        serviceName: { $regex: `^${serviceName.trim()}$`, $options: 'i' }
+        serviceName: { $regex: `^${escapeRegex(serviceName.trim())}$`, $options: 'i' }
 
       });
 
@@ -106,7 +109,7 @@ const instanceController = {
 
       if (rootName) {
         const instances = await RootInstance.find({
-          serviceName: { $regex: rootName.trim(), $options: 'i' }
+          serviceName: { $regex: escapeRegex(rootName.trim()), $options: 'i' }
         })
           .populate({
             path: 'subInstances',
@@ -140,7 +143,7 @@ const instanceController = {
       }
 
       if (search) {
-        const searchTerm = search.trim();
+        const searchTerm = escapeRegex(search.trim());
 
         // Search root instances
         const matchingRoots = await RootInstance.find({
@@ -243,7 +246,7 @@ const instanceController = {
 
       if (serviceName && serviceName !== instance.serviceName) {
         const duplicate = await RootInstance.findOne({
-          serviceName: { $regex: `^${serviceName.trim()}$`, $options: 'i' },
+          serviceName: { $regex: `^${escapeRegex(serviceName.trim())}$`, $options: 'i' },
           _id: { $ne: instanceId }
         });
 
@@ -398,7 +401,7 @@ const instanceController = {
       }
 
       const existingSubInstance = await SubInstance.findOne({
-        name: { $regex: `^${name.trim()}$`, $options: 'i' },
+        name: { $regex: `^${escapeRegex(name.trim())}$`, $options: 'i' },
         rootInstance: instanceId,
         isDeleted: false  // ✨ Only check active subinstances
       });
@@ -573,7 +576,7 @@ const instanceController = {
       // Check for duplicates (excluding soft-deleted)
       if (name && name !== subInstance.name) {
         const duplicate = await SubInstance.findOne({
-          name: { $regex: `^${name.trim()}$`, $options: 'i' },
+          name: { $regex: `^${escapeRegex(name.trim())}$`, $options: 'i' },
           rootInstance: instanceId,
           _id: { $ne: subId }
         });

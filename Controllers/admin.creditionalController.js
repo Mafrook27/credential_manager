@@ -17,6 +17,9 @@ const adminCredentialController = {
       const search = Array.isArray(rawSearch) ? rawSearch[0]?.trim() : rawSearch?.trim();
       // CHANGED: Removed type extraction
 
+      // Escape special regex characters to prevent regex errors
+      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
       const baseAccessFilter = {
         isDeleted: false  // ADDED: Admin filter to exclude soft-deleted
       };
@@ -25,11 +28,12 @@ const adminCredentialController = {
       let rootQuery = {};
 
       if (search) {
-        rootQuery.serviceName = { $regex: search, $options: 'i' };
+        const escapedSearch = escapeRegex(search);
+        rootQuery.serviceName = { $regex: escapedSearch, $options: 'i' };
       }
 
       const subQuery = search
-        ? { name: { $regex: search, $options: 'i' }, isDeleted: false }  // CHANGED: Added isDeleted filter
+        ? { name: { $regex: escapeRegex(search), $options: 'i' }, isDeleted: false }  // CHANGED: Added isDeleted filter and escape regex
         : null;
 
       const [rootInstances, subInstances] = await Promise.all([

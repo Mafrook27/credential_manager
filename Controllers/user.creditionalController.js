@@ -21,6 +21,9 @@ const userCredentialController = {
       const search = Array.isArray(rawSearch) ? rawSearch[0] : rawSearch?.trim();
       // CHANGED: Removed type extraction
 
+      // Escape special regex characters to prevent regex errors
+      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
       const currentUser = await User.findById(userId).lean();
       if (!currentUser) throw Object.assign(new Error('User not found'), { statusCode: 404 });
 
@@ -37,11 +40,12 @@ const userCredentialController = {
       // CHANGED: Removed type filter logic
 
       if (search) {
-        rootQuery.serviceName = { $regex: search, $options: 'i' };
+        const escapedSearch = escapeRegex(search);
+        rootQuery.serviceName = { $regex: escapedSearch, $options: 'i' };
       }
 
       const subQuery = search
-        ? { name: { $regex: search, $options: 'i' }, isDeleted: false }
+        ? { name: { $regex: escapeRegex(search), $options: 'i' }, isDeleted: false }
         : { isDeleted: false };
       const [rootInstances, subInstances] = await Promise.all([
         RootInstance.find(rootQuery).select('_id'),

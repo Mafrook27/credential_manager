@@ -22,9 +22,9 @@ const commonController = {
       const parsedPage = Math.max(parseInt(page), 1);
       const skip = (parsedPage - 1) * parsedLimit;
 
-      // 🔍 Fetch paginated users (include status fields for frontend filtering)
+      // 🔍 Fetch paginated users (include role field for frontend filtering)
       const [users, total] = await Promise.all([
-        User.find({}, '_id name email isVerified isActive isDeleted')
+        User.find({}, '_id name email role isVerified isActive isDeleted')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(parsedLimit)
