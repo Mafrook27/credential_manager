@@ -885,8 +885,7 @@ const adminController = {
                   summary: 1,
                   myInstances: 1,
                   myCredentials: 1,
-                  sharedAccess: 1,
-                  hasMatchingAccess: 0
+                  sharedAccess: 1
                 }
               }
             ]
