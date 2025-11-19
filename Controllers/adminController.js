@@ -520,333 +520,62 @@ const adminController = {
   },
 
   // GET /api/admin/access
-  // GET /api/admin/access?userName=<name>&rootName=<root>&subName=<sub>&type=<type>&search=<term>&accessGivenToMe=<true/false>&accessGivenByMe=<true/false>&page=<page>&limit=<limit>
+  // Query params:
+  //   search: string (matches user name/email/role)
+  //   rootName: string (matches rootInstance.serviceName)
+  //   subName: string (matches subInstance.name)
+  //   accessGivenToMe: 'true' | 'false'
+  //   accessGivenByMe: 'true' | 'false'
+  //   page: number
+  //   limit: number
   getUserAccess: async (req, res, next) => {
     try {
       const {
-        userName,
+        search,
         rootName,
         subName,
-        search,
         accessGivenToMe,
         accessGivenByMe,
         page = 1,
         limit = 10
       } = req.query;
-      // CHANGED: Removed type parameter
 
-      const parsedLimit = Math.max(parseInt(limit), 1);
-      const parsedPage = Math.max(parseInt(page), 1);
+      const parsedLimit = Math.max(parseInt(limit, 10) || 10, 1);
+      const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
       const skip = (parsedPage - 1) * parsedLimit;
 
       const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-      const showMyInstances = accessGivenToMe !== 'true';
-      const showSharedAccess = accessGivenByMe !== 'true';
+      const searchRegex = search
+        ? new RegExp(escapeRegex(search.trim()), 'i')
+        : null;
+      const rootRegex = rootName
+        ? new RegExp(escapeRegex(rootName.trim()), 'i')
+        : null;
+      const subRegex = subName
+        ? new RegExp(escapeRegex(subName.trim()), 'i')
+        : null;
+
       const isAccessGivenToMe = accessGivenToMe === 'true';
       const isAccessGivenByMe = accessGivenByMe === 'true';
 
-      const userMatch = {};
-      if (userName) {
-        userMatch.name = {
-          $regex: escapeRegex(userName.trim()),
-          $options: 'i'
-        };
-      }
-
-      // CHANGED: Removed type from root conditions
-      const rootMatchConditions = [];
-      if (rootName) {
-        rootMatchConditions.push({
-          serviceName: { $regex: escapeRegex(rootName.trim()), $options: 'i' }
-        });
-      }
-
-      const subMatchConditions = [];
-      if (subName) {
-        subMatchConditions.push({
-          name: { $regex: escapeRegex(subName.trim()), $options: 'i' }
-        });
+      // 1) Base user match (cheap, no lookups yet)
+      const userMatch = {
+        isDeleted: false
+      };
+      if (searchRegex) {
+        userMatch.$or = [
+          { name: { $regex: searchRegex } },
+          { email: { $regex: searchRegex } },
+          { role: { $regex: searchRegex } }
+        ];
       }
 
       const pipeline = [
-        ...(Object.keys(userMatch).length > 0 ? [{ $match: userMatch }] : []),
-
-        ...(showMyInstances ? [{
-          $lookup: {
-            from: 'rootinstances',
-            let: { userId: '$_id' },
-            pipeline: [
-              { $match: { $expr: { $eq: ['$createdBy', '$$userId'] } } },
-              ...(rootMatchConditions.length > 0 ? [{ $match: { $and: rootMatchConditions } }] : []),
-              {
-                $lookup: {
-                  from: 'subinstances',
-                  let: { rootId: '$_id' },
-                  pipeline: [
-                    { $match: { $expr: { $eq: ['$rootInstance', '$$rootId'] } } },
-                    { $match: { isDeleted: false } },  // ADDED: Filter soft-deleted subinstances
-                    ...(subMatchConditions.length > 0 ? [{ $match: { $or: subMatchConditions } }] : []),
-                    {
-                      $project: {
-                        subId: '$_id',
-                        subName: '$name',
-                        createdAt: 1
-                      }
-                    }
-                  ],
-                  as: 'subs'
-                }
-              },
-              {
-                $project: {
-                  rootId: '$_id',
-                  rootName: '$serviceName',
-                  createdAt: 1,
-                  subInstances: '$subs'
-                }
-              }
-            ],
-            as: 'myInstances'
-          }
-        },
-        {
-          $lookup: {
-            from: 'credentials',
-            let: { userId: '$_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [
-                      { $eq: ['$createdBy', '$$userId'] },
-                      { $ne: ['$isDeleted', true] }
-                    ]
-                  }
-                }
-              },
-              {
-                $lookup: {
-                  from: 'rootinstances',
-                  localField: 'rootInstance',
-                  foreignField: '_id',
-                  as: 'rootData'
-                }
-              },
-              {
-                $lookup: {
-                  from: 'subinstances',
-                  let: { subId: '$subInstance' },
-                  pipeline: [
-                    { $match: { $expr: { $eq: ['$_id', '$$subId'] } } },
-                    { $match: { isDeleted: false } }
-                  ],
-                  as: 'subData'
-                }
-              },
-              ...(rootMatchConditions.length > 0 ? [{
-                $match: {
-                  $and: rootMatchConditions.map(cond => {
-                    const key = Object.keys(cond)[0];
-                    return { [`rootData.${key}`]: cond[key] };
-                  })
-                }
-              }] : []),
-              ...(subMatchConditions.length > 0 ? [{
-                $match: {
-                  $or: subMatchConditions.map(cond => {
-                    const key = Object.keys(cond)[0];
-                    return { [`subData.${key}`]: cond[key] };
-                  })
-                }
-              }] : []),
-              {
-                $lookup: {
-                  from: 'c_users',
-                  localField: 'sharedWith',
-                  foreignField: '_id',
-                  as: 'sharedWithUsers'
-                }
-              },
-              {
-                $project: {
-                  credentialId: '$_id',
-                  rootInstance: {
-                    rootId: { $arrayElemAt: ['$rootData._id', 0] },
-                    rootName: { $arrayElemAt: ['$rootData.serviceName', 0] }
-                  },
-                  subInstance: {
-                    subId: { $arrayElemAt: ['$subData._id', 0] },
-                    subName: { $arrayElemAt: ['$subData.name', 0] }
-                  },
-                  fields: '$fields',
-                  notes: '$notes',
-                  createdAt: 1,
-                  sharedWithCount: { $size: '$sharedWithUsers' },
-                  sharedWith: {
-                    $map: {
-                      input: '$sharedWithUsers',
-                      as: 'user',
-                      in: {
-                        userId: '$$user._id',
-                        name: '$$user.name',
-                        email: '$$user.email',
-                        sharedAt: '$createdAt'
-                      }
-                    }
-                  }
-                }
-              }
-            ],
-            as: 'myCredentials'
-          }
-        }] : []),
-
-        ...(showSharedAccess ? [{
-          $lookup: {
-            from: 'credentials',
-            let: { userId: '$_id' },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [
-                      { $in: ['$$userId', '$sharedWith'] },
-                      { $ne: ['$isDeleted', true] }  // ADDED: Filter soft-deleted credentials
-                    ]
-                  }
-                }
-              },
-              {
-                $lookup: {
-                  from: 'rootinstances',
-                  localField: 'rootInstance',
-                  foreignField: '_id',
-                  as: 'rootData'
-                }
-              },
-              {
-                $lookup: {
-                  from: 'subinstances',
-                  let: { subId: '$subInstance' },
-                  pipeline: [
-                    { $match: { $expr: { $eq: ['$_id', '$$subId'] } } },
-                    { $match: { isDeleted: false } }  // ADDED: Filter soft-deleted subinstances
-                  ],
-                  as: 'subData'
-                }
-              },
-              {
-                $lookup: {
-                  from: 'c_users',
-                  localField: 'createdBy',
-                  foreignField: '_id',
-                  as: 'ownerData'
-                }
-              },
-              ...(rootMatchConditions.length > 0 ? [{
-                $match: {
-                  $and: rootMatchConditions.map(cond => {
-                    const key = Object.keys(cond)[0];
-                    return { [`rootData.${key}`]: cond[key] };
-                  })
-                }
-              }] : []),
-              ...(subMatchConditions.length > 0 ? [{
-                $match: {
-                  $or: subMatchConditions.map(cond => {
-                    const key = Object.keys(cond)[0];
-                    return { [`subData.${key}`]: cond[key] };
-                  })
-                }
-              }] : []),
-              {
-                $project: {
-                  credentialId: '$_id',
-                  rootInstance: {
-                    rootId: { $arrayElemAt: ['$rootData._id', 0] },
-                    rootName: { $arrayElemAt: ['$rootData.serviceName', 0] }
-                  },
-                  subInstance: {
-                    subId: { $arrayElemAt: ['$subData._id', 0] },
-                    subName: { $arrayElemAt: ['$subData.name', 0] }
-                  },
-                  credentialData: {
-                    fields: '$fields',
-                    notes: '$notes'
-                  },
-                  sharedBy: {
-                    userId: { $arrayElemAt: ['$ownerData._id', 0] },
-                    name: { $arrayElemAt: ['$ownerData.name', 0] },
-                    email: { $arrayElemAt: ['$ownerData.email', 0] }
-                  },
-                  sharedAt: '$createdAt'
-                }
-              }
-            ],
-            as: 'sharedAccess'
-          }
-        }] : []),
-
-        {
-          $addFields: {
-            summary: {
-              rootsCreated: { $size: { $ifNull: ['$myInstances', []] } },
-              subsCreated: {
-                $sum: {
-                  $map: {
-                    input: { $ifNull: ['$myInstances', []] },
-                    as: 'root',
-                    in: { $size: { $ifNull: ['$$root.subInstances', []] } }
-                  }
-                }
-              },
-              credentialsOwned: { $size: { $ifNull: ['$myCredentials', []] } },
-              credentialsSharedWithMe: { $size: { $ifNull: ['$sharedAccess', []] } },
-              credentialsIShared: {
-                $sum: {
-                  $map: {
-                    input: { $ifNull: ['$myCredentials', []] },
-                    as: 'cred',
-                    in: { $ifNull: ['$$cred.sharedWithCount', 0] }
-                  }
-                }
-              }
-            }
-          }
-        },
-
-        {
-          $project: {
-            userId: '$_id',
-            name: 1,
-            email: 1,
-            role: 1,
-            lastLogin: 1,
-            summary: 1,
-            myInstances: { $ifNull: ['$myInstances', []] },
-            myCredentials: { $ifNull: ['$myCredentials', []] },
-            sharedAccess: { $ifNull: ['$sharedAccess', []] }
-          }
-        },
-
-        ...(search ? [{
-          $match: {
-            $or: [
-              { name: { $regex: escapeRegex(search.trim()), $options: 'i' } },
-              { email: { $regex: escapeRegex(search.trim()), $options: 'i' } },
-              { 'myInstances.rootName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
-              { 'myInstances.subInstances.subName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
-              { 'myCredentials.rootInstance.rootName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
-              { 'myCredentials.subInstance.subName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
-              { 'sharedAccess.rootInstance.rootName': { $regex: escapeRegex(search.trim()), $options: 'i' } },
-              { 'sharedAccess.subInstance.subName': { $regex: escapeRegex(search.trim()), $options: 'i' } }
-            ]
-          }
-        }] : []),
-
+        { $match: userMatch },
         { $sort: { name: 1 } },
 
+        // 2) Use facet so we only run heavy lookups for paginated users
         {
           $facet: {
             metadata: [
@@ -855,7 +584,311 @@ const adminController = {
             ],
             data: [
               { $skip: skip },
-              { $limit: parsedLimit }
+              { $limit: parsedLimit },
+
+              // --- Roots & subs created by this user ---
+              {
+                $lookup: {
+                  from: 'rootinstances',
+                  let: { userId: '$_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: { $eq: ['$createdBy', '$$userId'] }
+                      }
+                    },
+                    ...(rootRegex
+                      ? [{ $match: { serviceName: { $regex: rootRegex } } }]
+                      : []),
+                    {
+                      $lookup: {
+                        from: 'subinstances',
+                        let: { rootId: '$_id' },
+                        pipeline: [
+                          {
+                            $match: {
+                              $expr: { $eq: ['$rootInstance', '$$rootId'] }
+                            }
+                          },
+                          ...(subRegex
+                            ? [{ $match: { name: { $regex: subRegex } } }]
+                            : []),
+                          {
+                            $project: {
+                              subId: '$_id',
+                              subName: '$name',
+                              createdAt: 1
+                            }
+                          }
+                        ],
+                        as: 'subInstances'
+                      }
+                    },
+                    {
+                      $project: {
+                        rootId: '$_id',
+                        rootName: '$serviceName',
+                        type: '$type',
+                        createdAt: 1,
+                        subInstances: 1,
+                        subsCount: { $size: '$subInstances' }
+                      }
+                    }
+                  ],
+                  as: 'myInstances'
+                }
+              },
+
+              // --- Credentials owned by this user ---
+              {
+                $lookup: {
+                  from: 'credentials',
+                  let: { userId: '$_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $and: [
+                            { $eq: ['$createdBy', '$$userId'] },
+                            { $ne: ['$isDeleted', true] }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      $lookup: {
+                        from: 'rootinstances',
+                        localField: 'rootInstance',
+                        foreignField: '_id',
+                        as: 'rootData'
+                      }
+                    },
+                    {
+                      $lookup: {
+                        from: 'subinstances',
+                        localField: 'subInstance',
+                        foreignField: '_id',
+                        as: 'subData'
+                      }
+                    },
+                    {
+                      $lookup: {
+                        from: 'c_users',
+                        localField: 'sharedWith',
+                        foreignField: '_id',
+                        as: 'sharedWithUsers'
+                      }
+                    },
+                    {
+                      $addFields: {
+                        rootName: { $arrayElemAt: ['$rootData.serviceName', 0] },
+                        subName: { $arrayElemAt: ['$subData.name', 0] },
+                        sharedWithCount: { $size: { $ifNull: ['$sharedWith', []] } }
+                      }
+                    },
+                    ...(rootRegex
+                      ? [{ $match: { rootName: { $regex: rootRegex } } }]
+                      : []),
+                    ...(subRegex
+                      ? [{ $match: { subName: { $regex: subRegex } } }]
+                      : []),
+                    {
+                      $project: {
+                        credentialId: '$_id',
+                        rootInstance: {
+                          rootId: { $arrayElemAt: ['$rootData._id', 0] },
+                          rootName: { $arrayElemAt: ['$rootData.serviceName', 0] }
+                        },
+                        subInstance: {
+                          subId: { $arrayElemAt: ['$subData._id', 0] },
+                          subName: { $arrayElemAt: ['$subData.name', 0] }
+                        },
+                        fields: '$fields',
+                        notes: '$notes',
+                        createdAt: 1,
+                        sharedWithCount: 1,
+                        sharedWith: {
+                          $map: {
+                            input: '$sharedWithUsers',
+                            as: 'user',
+                            in: {
+                              userId: '$$user._id',
+                              name: '$$user.name',
+                              email: '$$user.email',
+                              sharedAt: '$createdAt'
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  as: 'myCredentials'
+                }
+              },
+
+              // --- Credentials shared WITH this user ---
+              {
+                $lookup: {
+                  from: 'credentials',
+                  let: { userId: '$_id' },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $and: [
+                            { $in: ['$$userId', '$sharedWith'] },
+                            { $ne: ['$isDeleted', true] }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      $lookup: {
+                        from: 'rootinstances',
+                        localField: 'rootInstance',
+                        foreignField: '_id',
+                        as: 'rootData'
+                      }
+                    },
+                    {
+                      $lookup: {
+                        from: 'subinstances',
+                        localField: 'subInstance',
+                        foreignField: '_id',
+                        as: 'subData'
+                      }
+                    },
+                    {
+                      $lookup: {
+                        from: 'c_users',
+                        localField: 'createdBy',
+                        foreignField: '_id',
+                        as: 'ownerData'
+                      }
+                    },
+                    {
+                      $addFields: {
+                        rootName: { $arrayElemAt: ['$rootData.serviceName', 0] },
+                        subName: { $arrayElemAt: ['$subData.name', 0] }
+                      }
+                    },
+                    ...(rootRegex
+                      ? [{ $match: { rootName: { $regex: rootRegex } } }]
+                      : []),
+                    ...(subRegex
+                      ? [{ $match: { subName: { $regex: subRegex } } }]
+                      : []),
+                    {
+                      $project: {
+                        credentialId: '$_id',
+                        rootInstance: {
+                          rootId: { $arrayElemAt: ['$rootData._id', 0] },
+                          rootName: { $arrayElemAt: ['$rootData.serviceName', 0] },
+                          type: { $arrayElemAt: ['$rootData.type', 0] }
+                        },
+                        subInstance: {
+                          subId: { $arrayElemAt: ['$subData._id', 0] },
+                          subName: { $arrayElemAt: ['$subData.name', 0] }
+                        },
+                        credentialData: {
+                          fields: '$fields',
+                          notes: '$notes'
+                        },
+                        sharedBy: {
+                          userId: { $arrayElemAt: ['$ownerData._id', 0] },
+                          name: { $arrayElemAt: ['$ownerData.name', 0] },
+                          email: { $arrayElemAt: ['$ownerData.email', 0] }
+                        },
+                        sharedAt: '$createdAt'
+                      }
+                    }
+                  ],
+                  as: 'sharedAccess'
+                }
+              },
+
+              // --- Build summary counts ---
+              {
+                $addFields: {
+                  summary: {
+                    rootsCreated: { $size: '$myInstances' },
+                    subsCreated: {
+                      $sum: {
+                        $map: {
+                          input: '$myInstances',
+                          as: 'root',
+                          in: { $ifNull: ['$$root.subsCount', 0] }
+                        }
+                      }
+                    },
+                    credentialsOwned: { $size: '$myCredentials' },
+                    credentialsSharedWithMe: { $size: '$sharedAccess' },
+                    credentialsIShared: {
+                      $sum: {
+                        $map: {
+                          input: '$myCredentials',
+                          as: 'cred',
+                          in: { $ifNull: ['$$cred.sharedWithCount', 0] }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+
+              // --- Filter by root/sub if requested ---
+              ...(rootRegex || subRegex
+                ? [
+                  {
+                    $addFields: {
+                      hasMatchingAccess: {
+                        $or: [
+                          { $gt: [{ $size: '$myInstances' }, 0] },
+                          { $gt: [{ $size: '$myCredentials' }, 0] },
+                          { $gt: [{ $size: '$sharedAccess' }, 0] }
+                        ]
+                      }
+                    }
+                  },
+                  { $match: { hasMatchingAccess: true } }
+                ]
+                : []),
+
+              // --- Filter by accessGivenToMe / accessGivenByMe ---
+              ...(isAccessGivenToMe
+                ? [
+                  {
+                    $match: {
+                      'summary.credentialsSharedWithMe': { $gt: 0 }
+                    }
+                  }
+                ]
+                : []),
+              ...(isAccessGivenByMe
+                ? [
+                  {
+                    $match: {
+                      'summary.credentialsIShared': { $gt: 0 }
+                    }
+                  }
+                ]
+                : []),
+
+              // --- Final shape for each user row ---
+              {
+                $project: {
+                  userId: '$_id',
+                  name: 1,
+                  email: 1,
+                  role: 1,
+                  lastLogin: 1,
+                  summary: 1,
+                  myInstances: 1,
+                  myCredentials: 1,
+                  sharedAccess: 1,
+                  hasMatchingAccess: 0
+                }
+              }
             ]
           }
         }
@@ -863,82 +896,41 @@ const adminController = {
 
       const result = await User.aggregate(pipeline);
 
-      const total = result[0].metadata[0]?.total || 0;
+      const meta = result[0].metadata[0] || {
+        total: 0,
+        page: parsedPage,
+        limit: parsedLimit
+      };
       const rawUsers = result[0].data || [];
 
-      // Map users to response format (no additional filtering needed - pipeline handles it)
-      const users = rawUsers.map(user => ({
-        userId: user.userId,
+      const users = rawUsers.map((u) => ({
+        userId: u.userId,
         userDetails: {
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          lastLogin: user.lastLogin
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          lastLogin: u.lastLogin
         },
-        summary: user.summary,
-        ...(showMyInstances && {
-          myInstances: user.myInstances,
-          myCredentials: user.myCredentials
-        }),
-        ...(showSharedAccess && { sharedAccess: user.sharedAccess })
+        summary: u.summary,
+        myInstances: u.myInstances || [],
+        myCredentials: u.myCredentials || [],
+        sharedAccess: u.sharedAccess || []
       }));
-
-      let message = 'User access details retrieved successfully';
-      let queryContext = {};
-
-      if (isAccessGivenToMe && userName) {
-        message = `Showing credentials shared WITH ${userName}`;
-        queryContext = {
-          filter: 'accessGivenToMe',
-          description: `Credentials that other users have shared with ${userName}`,
-          focusArea: 'sharedAccess'
-        };
-      } else if (isAccessGivenToMe) {
-        message = 'Showing credentials shared WITH users';
-        queryContext = {
-          filter: 'accessGivenToMe',
-          description: 'Credentials that other users have shared with these users',
-          focusArea: 'sharedAccess'
-        };
-      } else if (isAccessGivenByMe && userName) {
-        message = `Showing credentials shared BY ${userName}`;
-        queryContext = {
-          filter: 'accessGivenByMe',
-          description: `Credentials that ${userName} has shared with other users`,
-          focusArea: 'myCredentials.sharedWith'
-        };
-      } else if (isAccessGivenByMe) {
-        message = 'Showing credentials shared BY users';
-        queryContext = {
-          filter: 'accessGivenByMe',
-          description: 'Credentials that these users have shared with others',
-          focusArea: 'myCredentials.sharedWith'
-        };
-      } else if (userName) {
-        message = `Showing complete access details for ${userName}`;
-        queryContext = {
-          filter: 'none',
-          description: `All instances, credentials, and shared access for ${userName}`,
-          focusArea: 'all'
-        };
-      }
 
       res.json({
         success: true,
-        message: message,
-        queryContext: queryContext,
+        message: 'User access summary retrieved successfully',
         pagination: {
-          page: parsedPage,
-          limit: parsedLimit,
-          totalUsers: total,  // Use total from aggregation
-          totalPages: Math.ceil(total / parsedLimit)
+          page: meta.page,
+          limit: meta.limit,
+          totalUsers: meta.total,
+          totalPages: Math.ceil((meta.total || 0) / meta.limit)
         },
         data: { users }
       });
-
-    } catch (error) {
-      logger.error('adminGetUserAccess', { message: error.message, stack: error.stack });
-      next(error);
+    } catch (err) {
+      console.error('getUserAccess error:', err);
+      next(err);
     }
   },
 }
