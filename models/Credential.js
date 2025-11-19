@@ -32,6 +32,10 @@ const credentialSchema = new mongoose.Schema({
       }
     }
   ],
+  url: {
+    type: String,
+    default: ''
+  },
   notes: {
     type: String,
     default: ''

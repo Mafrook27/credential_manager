@@ -49,6 +49,16 @@ const createCredentialSchema = Joi.object({
       'any.required': 'Fields array is required'
     }),
 
+  url: Joi.string()
+    .uri()
+    .max(500)
+    .optional()
+    .allow('')
+    .messages({
+      'string.uri': 'URL must be a valid URI',
+      'string.max': 'URL cannot exceed 500 characters'
+    }),
+
   notes: Joi.string()
     .max(500)
     .optional()
@@ -85,6 +95,16 @@ const updateCredentialSchema = Joi.object({
     .optional()
     .messages({
       'array.min': 'At least one credential field is required'
+    }),
+
+  url: Joi.string()
+    .uri()
+    .max(500)
+    .optional()
+    .allow('')
+    .messages({
+      'string.uri': 'URL must be a valid URI',
+      'string.max': 'URL cannot exceed 500 characters'
     }),
 
   notes: Joi.string()

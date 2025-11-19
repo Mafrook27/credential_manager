@@ -152,7 +152,7 @@ const adminCredentialController = {
     try {
       const userId = req.payload.id;
       const { rootId, subId } = req.query
-      const { fields, notes } = req.body;
+      const { fields, url, notes } = req.body;
 
       // ADDED: Validation
       if (!rootId || !subId) {
@@ -219,6 +219,7 @@ const adminCredentialController = {
         subInstance: subId,
         createdBy: userId,
         fields: encryptedFields,
+        url: url || '',
         notes: notes || ''
       });
 
@@ -261,7 +262,7 @@ const adminCredentialController = {
     try {
       const userId = req.payload.id;
       const { credId } = req.params;
-      const { fields, notes } = req.body;
+      const { fields, url, notes } = req.body;
 
       const credential = await Credential.findById(credId)
         .populate('rootInstance', 'serviceName')  // CHANGED: Removed type
@@ -293,6 +294,7 @@ const adminCredentialController = {
           value: encrypt(field.value)
         }));
       }
+      if (url !== undefined) credential.url = url;
       if (notes !== undefined) credential.notes = notes;
 
       await credential.save();

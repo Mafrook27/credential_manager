@@ -201,7 +201,7 @@ const userCredentialController = {
     try {
       const userId = req.payload.id;
       const { rootId, subId } = req.query;
-      const { fields, notes } = req.body;
+      const { fields, url, notes } = req.body;
 
       // ADDED: Validation checks
       if (!rootId || !subId) {
@@ -268,6 +268,7 @@ const userCredentialController = {
         subInstance: subId,
         createdBy: userId,
         fields: encryptedFields,
+        url: url || '',
         notes: notes || ''
       });
 
@@ -313,7 +314,7 @@ const userCredentialController = {
     try {
       const userId = req.payload.id;
       const credId = req.params.credId;
-      const { fields, notes } = req.body;
+      const { fields, url, notes } = req.body;
 
       const credential = await Credential.findById(credId)
         .populate('rootInstance', 'serviceName')  // CHANGED: Removed type
@@ -353,6 +354,7 @@ const userCredentialController = {
           value: encrypt(field.value)
         }));
       }
+      if (url !== undefined) credential.url = url;
       if (notes !== undefined) credential.notes = notes;
 
       await credential.save();
