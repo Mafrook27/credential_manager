@@ -84,13 +84,19 @@ const adminCredentialController = {
 
       const displayCredentials = activeCredentials.map(cred => getDisplayCredential(cred));
 
+      // Count only active credentials (excluding those with deleted subInstances)
+      const activeTotal = await Credential.countDocuments({
+        ...finalFilter,
+        subInstance: { $in: await SubInstance.find({ isDeleted: false }).distinct('_id') }
+      });
+
       res.json({
         success: true,
         count: activeCredentials.length,  // CHANGED: Use activeCredentials count
-        total,
+        total: activeTotal,  // CHANGED: Use active total count
         page: parsedPage,
         limit: parsedLimit,
-        totalPages: Math.ceil(total / parsedLimit),
+        totalPages: Math.ceil(activeTotal / parsedLimit),  // CHANGED: Use active total
         data: { credentials: displayCredentials }
       });
 
