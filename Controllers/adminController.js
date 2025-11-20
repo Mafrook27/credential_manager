@@ -451,6 +451,13 @@ const adminController = {
 
       // Set isVerified to explicit value
       user.isVerified = isVerified;
+
+      // Clear rejection fields when approving
+      if (isVerified) {
+        user.rejectedAt = null;
+        user.rejectedBy = null;
+      }
+
       await user.save();
 
       // If rejecting user, invalidate all their sessions
@@ -468,6 +475,98 @@ const adminController = {
       logger.info(`adminUser${action}`, { userId: id, performedBy: req.user._id });
     } catch (error) {
       logger.error('approveUser', { message: error.message, stack: error.stack });
+      next(error);
+    }
+  },
+
+  // Reject User (Mark as rejected without deleting)
+  rejectUser: async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      const user = await User.findById(id);
+      if (!user) {
+        const error = new Error("User not found");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      // Prevent modifying admin users
+      if (user.role === 'admin') {
+        const error = new Error('Cannot modify admin users');
+        error.statusCode = 403;
+        throw error;
+      }
+
+      // Check if already deleted
+      if (user.isDeleted) {
+        const error = new Error('Cannot modify deleted users');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Mark as rejected
+      user.rejectedAt = new Date();
+      user.rejectedBy = req.user._id;
+      user.isVerified = false;
+      await user.save();
+
+      // Invalidate all their sessions
+      await Session.deleteMany({ userId: id });
+      logger.info('userSessionsInvalidated', { userId: id, reason: 'rejected', performedBy: req.user._id });
+
+      res.status(200).json({
+        success: true,
+        message: `User ${user.email} rejected successfully.`,
+      });
+
+      logger.info('adminUserRejected', { userId: id, performedBy: req.user._id });
+    } catch (error) {
+      logger.error('rejectUser', { message: error.message, stack: error.stack });
+      next(error);
+    }
+  },
+
+  // Undo User Rejection
+  undoRejection: async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      const user = await User.findById(id);
+      if (!user) {
+        const error = new Error("User not found");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      // Prevent modifying admin users
+      if (user.role === 'admin') {
+        const error = new Error('Cannot modify admin users');
+        error.statusCode = 403;
+        throw error;
+      }
+
+      // Check if already deleted
+      if (user.isDeleted) {
+        const error = new Error('Cannot modify deleted users');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Clear rejection
+      user.rejectedAt = null;
+      user.rejectedBy = null;
+      // Keep isVerified as false (still pending)
+      await user.save();
+
+      res.status(200).json({
+        success: true,
+        message: `Rejection undone for ${user.email}.`,
+      });
+
+      logger.info('adminUndoRejection', { userId: id, performedBy: req.user._id });
+    } catch (error) {
+      logger.error('undoRejection', { message: error.message, stack: error.stack });
       next(error);
     }
   },
@@ -570,9 +669,7 @@ const adminController = {
       const isAccessGivenByMe = accessGivenByMe === 'true';
 
       // 1) Base user match (cheap, no lookups yet)
-      const userMatch = {
-        isDeleted: false
-      };
+      const userMatch = {};
       if (searchRegex) {
         userMatch.$or = [
           { name: { $regex: searchRegex } },

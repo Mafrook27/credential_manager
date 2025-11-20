@@ -18,6 +18,8 @@ router.use(authenticateToken, requireAdmin);
 router.get('/users', track('ADMIN_READ_ALL_USERS'), adminUserController.getAllUsers);
 router.post('/users', track('ADMIN_CREATE_USER'), adminUserController.createUser);
 router.patch('/users/:id/verify', track('ADMIN_APPROVE_USER'), adminUserController.approveUser);
+router.patch('/users/:id/reject', track('ADMIN_REJECT_USER'), adminUserController.rejectUser);
+router.patch('/users/:id/undo-rejection', track('ADMIN_UNDO_REJECTION'), adminUserController.undoRejection);
 router.patch('/users/:id/active', track('ADMIN_BLOCK_USER'), adminUserController.blockUser);
 router.get('/users/:id', track('ADMIN_READ_USER_PROFILE'), adminUserController.getUserProfile);
 router.put('/users/:id', track('ADMIN_UPDATE_USER'), adminUserController.updateUser);
