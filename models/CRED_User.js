@@ -10,6 +10,8 @@ const userSchema = new mongoose.Schema({
   isDeleted: { type: Boolean, default: false },
   deletedAt: { type: Date },
   deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'C_User' },
+  rejectedAt: { type: Date },
+  rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'C_User' },
   resetToken: { type: String },
   resetTokenExpiry: { type: Date },
   lastLogin: { type: Date },

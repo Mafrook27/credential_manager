@@ -1,5 +1,6 @@
 const User = require('../models/CRED_User');
 const Credential = require('../models/Credential');
+const SubInstance = require('../models/Sub_ins');
 const Audit = require('../models/Audit');
 const Session = require('../models/Session');
 const bcrypt = require("bcryptjs");
@@ -333,9 +334,10 @@ const adminController = {
           role: { $ne: 'admin' }
         }),
 
-        // Total credentials in system (exclude deleted) - all credentials from all users
+        // Total credentials in system (exclude deleted and those with deleted subInstances)
         totalCredentials: await Credential.countDocuments({
-          isDeleted: { $ne: true }
+          isDeleted: { $ne: true },
+          subInstance: { $in: await SubInstance.find({ isDeleted: false }).distinct('_id') }
         }),
 
         // Active users (exclude deleted, only verified and active, exclude admins)
