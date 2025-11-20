@@ -82,6 +82,7 @@ function getDisplayCredential(credential) {
     subInstance: credentialObj.subInstance,
     credentialData: {
       fields: displayFields,
+      url: credentialObj.url,
       notes: credentialObj.notes,
     },
     sharedWith: credentialObj.sharedWith || [],
@@ -107,6 +108,7 @@ function getDecryptedCredential(credential) {
     subInstance: credentialObj.subInstance,
     credentialData: {
       fields: decryptedFields,
+      url: credentialObj.url,
       notes: credentialObj.notes,
     },
     sharedWith: credentialObj.sharedWith || [],
