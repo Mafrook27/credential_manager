@@ -117,8 +117,8 @@ const auth = {
         error.statusCode = 403;
         throw error;
       }
-
-      user.lastLogin = Date.now();
+      const previousLoginTime = user.lastLogin;
+      user.lastLogin = new Date();
       await user.save();
       req.loginUserId = user._id.toString();
 
@@ -191,7 +191,7 @@ const auth = {
             role: user.role,
             isVerified: user.isVerified,
             isActive: user.isActive,
-            lastLogin: user.lastLogin
+            lastLogin: previousLoginTime
           }
         }
       });
