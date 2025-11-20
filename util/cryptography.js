@@ -62,17 +62,11 @@ function getDisplayCredential(credential) {
     ? credential.toObject()
     : credential;
 
-  // Handle fields array - decrypt and fade sensitive values
+  // Handle fields array - return encrypted data as-is (no decryption, no masking)
   const displayFields = credentialObj.fields ? credentialObj.fields.map(field => {
-    const decryptedValue = decrypt(field.value);
-    // Fade the value (show first and last char with stars in between)
-    const fadedValue = decryptedValue.length <= 2
-      ? "**"
-      : decryptedValue[0] + "*".repeat(decryptedValue.length - 2) + decryptedValue[decryptedValue.length - 1];
-
     return {
       key: field.key,
-      value: fadedValue
+      value: field.value  // Return encrypted value directly
     };
   }) : [];
 
